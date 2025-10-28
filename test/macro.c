@@ -229,6 +229,13 @@ int main() {
 #define M8(x,y) x y
   assert(9, M8(, 4+5), "M8(, 4+5)");
 
+  // c175
+#define M8(x,y) x*y
+  assert(20, M8((2+3), 4), "M8((2+3), 4)");
+
+#define M8(x,y) x*y
+  assert(12, M8((2,3), 4), "M8((2,3), 4)");
+
   printf("OK\n");
   return 0;
 }
