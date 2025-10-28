@@ -117,6 +117,9 @@ int main() {
   // c149
   ASSERT(8, sizeof(long double));
 
+  // c257
+  ASSERT(1, sizeof(main));
+
   printf("OK\n");
   return 0;
 }

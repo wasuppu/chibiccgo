@@ -213,7 +213,11 @@ func usualArithConv(lhs, rhs **Node) {
 }
 
 func funcType(returnTy *Type) *Type {
-	return &Type{kind: TY_FUNC, returnTy: returnTy}
+	// The C spec disallows sizeof(<function type>), but
+	// GCC allows that and the expression is evaluated to 1.
+	ty := newType(TY_FUNC, 1, 1)
+	ty.returnTy = returnTy
+	return ty
 }
 
 func (node *Node) addType() {
