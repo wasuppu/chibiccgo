@@ -44,7 +44,7 @@ func vfailAt(filename, input string, lineno, loc int, format string, args ...any
 	}
 
 	end := loc
-	for input[end] != '\n' {
+	for input[end] != '\x00' && input[end] != '\n' {
 		end++
 	}
 
