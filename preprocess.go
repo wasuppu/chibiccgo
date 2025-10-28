@@ -1034,6 +1034,40 @@ func (a RiscV) initMacro() {
 	addBuiltin("__LINE__", lineMacro)
 }
 
+// Concatenate adjacent string literals into a single string literal
+// as per the C spec.
+func joinAdjacentStringLiterals(tok1 *Token) {
+	for tok1.kind != TK_EOF {
+		if tok1.kind != TK_STR || tok1.next.kind != TK_STR {
+			tok1 = tok1.next
+			continue
+		}
+
+		tok2 := tok1.next
+		for tok2.kind == TK_STR {
+			tok2 = tok2.next
+		}
+
+		l := tok1.ty.arrayLen
+		for t := tok1.next; t != tok2; t = t.next {
+			l = l + t.ty.arrayLen - 1
+		}
+
+		buf := make([]byte, tok1.ty.base.size*l)
+		i := 0
+		for t := tok1; t != tok2; t = t.next {
+			copy(buf[i:], t.str[:t.ty.size])
+			i = i + t.ty.size - t.ty.base.size
+		}
+
+		*tok1 = *copyToken(tok1)
+		tok1.ty = arrayOf(tok1.ty.base, l)
+		tok1.str = string(buf)
+		tok1.next = tok2
+		tok1 = tok2
+	}
+}
+
 // Entry point function of the preprocessor.
 func preprocess(target Arch, tok *Token) *Token {
 	target.initMacro()
@@ -1042,5 +1076,7 @@ func preprocess(target Arch, tok *Token) *Token {
 		failTok(condIncl.tok, "unterminated conditional directive")
 	}
 	convertKeywords(tok)
+	joinAdjacentStringLiterals(tok)
+
 	return tok
 }

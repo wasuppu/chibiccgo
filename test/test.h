@@ -11,3 +11,5 @@ int strcmp(char *p, char *q);
 int memcmp(char *p, char *q, long n);
 // c136
 void exit(int n);
+// c193
+int strncmp(char *p, char *q, long n);
