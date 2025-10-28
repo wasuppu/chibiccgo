@@ -112,6 +112,14 @@ func getCommonType(ty1, ty2 *Type) *Type {
 	if ty1.base != nil {
 		return pointerTo(ty1.base)
 	}
+
+	if ty1.kind == TY_DOUBLE || ty2.kind == TY_DOUBLE {
+		return tyDouble
+	}
+	if ty1.kind == TY_FLOAT || ty2.kind == TY_FLOAT {
+		return tyFloat
+	}
+
 	if ty1.size < 4 {
 		ty1 = tyInt
 	}

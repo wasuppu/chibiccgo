@@ -232,6 +232,18 @@ func (a X64) pop(arg string) {
 	depth--
 }
 
+func (a X64) pushf() {
+	println("  sub $8, %%rsp")
+	println("  movsd %%xmm0, (%%rsp)")
+	depth++
+}
+
+func (a X64) popf(arg string) {
+	println("  movsd (%%rsp), %s", arg)
+	println("  add $8, %%rsp")
+	depth--
+}
+
 // Load a value from where %rax is pointing to.
 func (a X64) load(ty *Type) {
 	switch ty.kind {
@@ -529,6 +541,46 @@ func (a X64) genExpr(node *Node) {
 			return
 		}
 		return
+	}
+
+	if node.lhs.ty.isFlonum() {
+		a.genExpr(node.rhs)
+		a.pushf()
+		a.genExpr(node.lhs)
+		a.popf("%xmm1")
+
+		var sz string
+		if node.lhs.ty.kind == TY_FLOAT {
+			sz = "ss"
+		} else {
+			sz = "sd"
+		}
+
+		switch node.kind {
+		case ND_EQ, ND_NE, ND_LT, ND_LE:
+			println("  ucomi%s %%xmm0, %%xmm1", sz)
+
+			switch node.kind {
+			case ND_EQ:
+				println("  sete %%al")
+				println("  setnp %%dl")
+				println("  and %%dl, %%al")
+			case ND_NE:
+				println("  setne %%al")
+				println("  setp %%dl")
+				println("  or %%dl, %%al")
+			case ND_LT:
+				println("  seta %%al")
+			default:
+				println("  setae %%al")
+			}
+
+			println("  and $1, %%al")
+			println("  movzb %%al, %%rax")
+			return
+		}
+
+		failTok(node.tok, "invalid expression")
 	}
 
 	a.genExpr(node.rhs)
@@ -859,6 +911,18 @@ func (a RiscV) pop(arg string) {
 	depth--
 }
 
+func (a RiscV) pushf() {
+	println("  addi sp, sp, -8")
+	println("  fsd fa0, 0(sp)")
+	depth++
+}
+
+func (a RiscV) popf(arg string) {
+	println("  fld %s, 0(sp)", arg)
+	println("  addi sp,sp,8")
+	depth--
+}
+
 // Load a value from where %rax is pointing to.
 func (a RiscV) load(ty *Type) {
 	switch ty.kind {
@@ -1152,6 +1216,38 @@ func (a RiscV) genExpr(node *Node) {
 			return
 		}
 		return
+	}
+
+	if node.lhs.ty.isFlonum() {
+		a.genExpr(node.rhs)
+		a.pushf()
+		a.genExpr(node.lhs)
+		a.popf("fa1")
+
+		var suffix string
+		if node.lhs.ty.kind == TY_FLOAT {
+			suffix = "s"
+		} else {
+			suffix = "d"
+		}
+
+		switch node.kind {
+		case ND_EQ:
+			println("  feq.%s a0, fa0, fa1", suffix)
+			return
+		case ND_NE:
+			println("  feq.%s a0, fa0, fa1", suffix)
+			println("  seqz a0,a0")
+			return
+		case ND_LT:
+			println("  flt.%s a0, fa0, fa1", suffix)
+			return
+		case ND_LE:
+			println("  fle.%s a0, fa0, fa1", suffix)
+			return
+		}
+
+		failTok(node.tok, "invalid expression")
 	}
 
 	a.genExpr(node.rhs)
