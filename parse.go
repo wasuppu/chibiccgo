@@ -55,6 +55,7 @@ const (
 	ND_MUL                       // *
 	ND_DIV                       // /
 	ND_NEG                       // unary -
+	ND_MOD                       // %
 	ND_EQ                        // ==
 	ND_NE                        // !=
 	ND_LT                        // <
@@ -770,7 +771,7 @@ func toAssign(binary *Node) *Node {
 }
 
 // assign    = equality (assign-op assign)?
-// assign-op = "=" | "+=" | "-=" | "*=" | "/="
+// assign-op = "=" | "+=" | "-=" | "*=" | "/=" | "%="
 func assign(rest **Token, tok *Token) *Node {
 	node := equality(&tok, tok)
 
@@ -792,6 +793,10 @@ func assign(rest **Token, tok *Token) *Node {
 
 	if tok.equal("/=") {
 		return toAssign(NewBinary(ND_DIV, node, assign(rest, tok.next), tok))
+	}
+
+	if tok.equal("%=") {
+		return toAssign(NewBinary(ND_MOD, node, assign(rest, tok.next), tok))
 	}
 
 	*rest = tok
@@ -932,7 +937,7 @@ func add(rest **Token, tok *Token) *Node {
 	}
 }
 
-// mul = cast ("*" cast | "/" cast)*
+// mul = cast ("*" cast | "/" cast | "%" cast)*
 func mul(rest **Token, tok *Token) *Node {
 	node := cast(&tok, tok)
 
@@ -946,6 +951,11 @@ func mul(rest **Token, tok *Token) *Node {
 
 		if tok.equal("/") {
 			node = NewBinary(ND_DIV, node, cast(&tok, tok.next), start)
+			continue
+		}
+
+		if tok.equal("%") {
+			node = NewBinary(ND_MOD, node, cast(&tok, tok.next), start)
 			continue
 		}
 

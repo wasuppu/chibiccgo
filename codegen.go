@@ -317,13 +317,17 @@ func (a X64) genExpr(node *Node) {
 	case ND_MUL:
 		println("  imul %s, %s", di, ax)
 		return
-	case ND_DIV:
+	case ND_DIV, ND_MOD:
 		if node.lhs.ty.size == 8 {
 			println("  cqo")
 		} else {
 			println("  cdq")
 		}
 		println("  idiv %s", di)
+
+		if node.kind == ND_MOD {
+			println("  mov %%rdx, %%rax")
+		}
 		return
 	case ND_EQ, ND_NE, ND_LT, ND_LE:
 		println("  cmp %s, %s", di, ax)
@@ -666,6 +670,9 @@ func (a RiscV) genExpr(node *Node) {
 		return
 	case ND_DIV:
 		println("  div%s a0, a0, a1", suffix)
+		return
+	case ND_MOD:
+		println("  rem%s a0, a0, a1", suffix)
 		return
 	case ND_EQ, ND_NE:
 		println("  xor a0, a0, a1")
