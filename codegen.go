@@ -427,6 +427,13 @@ func (a X64) genStmt(node *Node) {
 			a.genStmt(n)
 		}
 		return
+	case ND_GOTO:
+		println("  jmp %s", node.uniqueLabel)
+		return
+	case ND_LABEL:
+		println("%s:", node.uniqueLabel)
+		a.genStmt(node.lhs)
+		return
 	case ND_RETURN:
 		a.genExpr(node.lhs)
 		println("  jmp .L.return.%s", currentGenFn.name)
@@ -803,6 +810,13 @@ func (a RiscV) genStmt(node *Node) {
 		for n := node.body; n != nil; n = n.next {
 			a.genStmt(n)
 		}
+		return
+	case ND_GOTO:
+		println("  j %s", node.uniqueLabel)
+		return
+	case ND_LABEL:
+		println("%s:", node.uniqueLabel)
+		a.genStmt(node.lhs)
 		return
 	case ND_RETURN:
 		a.genExpr(node.lhs)

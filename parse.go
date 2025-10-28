@@ -13,6 +13,10 @@ var scope = &Scope{}
 // Points to the function object the parser is currently parsing.
 var currentParseFn *Obj
 
+// Lists of all goto statements and labels in the curent function.
+var gotos *Node
+var labels *Node
+
 // Struct member
 type Member struct {
 	next   *Member
@@ -76,6 +80,8 @@ const (
 	ND_IF                        // "if"
 	ND_FOR                       // "for"
 	ND_BLOCK                     // { ... }
+	ND_GOTO                      // "goto"
+	ND_LABEL                     // Labeled statement
 	ND_FUNCALL                   // Function call
 	ND_EXPR_STMT                 // Expression statement
 	ND_STMT_EXPR                 // Statement expression
@@ -111,6 +117,11 @@ type Node struct {
 	funcname string
 	functy   *Type
 	args     *Node
+
+	// Goto or labeled statement
+	label       string
+	uniqueLabel string
+	gotoNext    *Node
 
 	vara *Obj  // Used if kind == ND_VAR
 	val  int64 // Used if kind == ND_NUM
@@ -646,6 +657,8 @@ func isTypename(tok *Token) bool {
 // | "if" "(" expr ")" stmt ("else" stmt)?
 // | "for" "(" expr-stmt expr? ";" expr? ")" stmt
 // | "while" "(" expr ")" stmt
+// | "goto" ident ";"
+// | ident ":" stmt
 // | "{" compound-stmt
 // | expr-stmt
 func stmt(rest **Token, tok *Token) *Node {
@@ -706,6 +719,25 @@ func stmt(rest **Token, tok *Token) *Node {
 		node.cond = expr(&tok, tok)
 		tok = tok.skip(")")
 		node.then = stmt(rest, tok)
+		return node
+	}
+
+	if tok.equal("goto") {
+		node := NewNode(ND_GOTO, tok)
+		node.label = getIdent(tok.next)
+		node.gotoNext = gotos
+		gotos = node
+		*rest = tok.next.next.skip(";")
+		return node
+	}
+
+	if tok.kind == TK_IDENT && tok.next.equal(":") {
+		node := NewNode(ND_LABEL, tok)
+		node.label = tok.lexeme
+		node.uniqueLabel = newUniqueName()
+		node.lhs = stmt(rest, tok.next.next)
+		node.gotoNext = labels
+		labels = node
 		return node
 	}
 
@@ -1454,6 +1486,28 @@ func createParamLvars(param *Type) {
 	}
 }
 
+// This function matches gotos with labels.
+
+// We cannot resolve gotos as we parse a function because gotos
+// can refer a label that appears later in the function.
+// So, we need to do this after we parse the entire function.
+func resolveGotoLabels() {
+	for x := gotos; x != nil; x = x.gotoNext {
+		for y := labels; y != nil; y = y.gotoNext {
+			if x.label == y.label {
+				x.uniqueLabel = y.uniqueLabel
+				break
+			}
+		}
+
+		if len(x.uniqueLabel) == 0 {
+			failTok(x.tok.next, "use of undeclared label")
+		}
+	}
+	labels = nil
+	gotos = nil
+}
+
 func function(tok *Token, basety *Type, attr *VarAttr) *Token {
 	ty := declarator(&tok, tok, basety)
 
@@ -1476,6 +1530,7 @@ func function(tok *Token, basety *Type, attr *VarAttr) *Token {
 	fn.body = compoundStmt(&tok, tok)
 	fn.locals = locals
 	leaveScope()
+	resolveGotoLabels()
 	return tok
 }
 
