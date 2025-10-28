@@ -196,6 +196,8 @@ func chooseArch(arch string) Arch {
 type Arch interface {
 	emitText(prog *Obj)
 	emitData(prog *Obj)
+	assemble(input, output string)
+	runLinker(inputs []string, output string)
 }
 
 type X64 struct{}

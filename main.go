@@ -9,6 +9,7 @@ import (
 )
 
 var optS bool
+var optC bool
 var optCC1 bool
 var optHashHashHash bool
 var optO string
@@ -19,6 +20,8 @@ var outfile string
 
 var inputPaths []string
 var tmpfiles []string
+
+var rvpath = "/opt/riscv-linux"
 
 func usage(status int) {
 	fmt.Fprintf(os.Stderr, "chibicc [ -o <path> ] <file>\n")
@@ -74,6 +77,11 @@ func parseArgs(args []string) {
 
 		if args[i] == "-S" {
 			optS = true
+			continue
+		}
+
+		if args[i] == "-c" {
+			optC = true
 			continue
 		}
 
@@ -197,17 +205,184 @@ func cc1(target Arch) {
 	codegen(target, prog, out)
 }
 
-func assemble(input, output string) {
-	var cmd []string
-	switch ArchName {
-	case "x64":
-		cmd = []string{"as", "-c", input, "-o", output}
-	case "riscv":
-		cmd = []string{"riscv64-unknown-linux-gnu-as", "-c", input, "-o", output}
-	default:
-		fail("invalid arch:", ArchName)
-	}
+func (a X64) assemble(input, output string) {
+	cmd := []string{"as", "-c", input, "-o", output}
 	runSubprocess(cmd)
+}
+
+func (a RiscV) assemble(input, output string) {
+	cmd := []string{"riscv64-unknown-linux-gnu-as", "-c", input, "-o", output}
+	runSubprocess(cmd)
+}
+
+func findFile(pattern string) string {
+	matches, err := filepath.Glob(pattern)
+	if err != nil {
+		fail(fmt.Sprintf("fail to exec file pattern %s:%s", pattern, err))
+	}
+	if len(matches) == 0 {
+		fail("no matching files found")
+	}
+	return matches[len(matches)-1]
+}
+
+// Returns true if a given file exists.
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return !os.IsNotExist(err)
+}
+
+func (a X64) findLibPath() string {
+	paths := []string{
+		"/usr/lib/x86_64-linux-gnu/crti.o",
+		"/usr/lib64/crti.o",
+	}
+
+	for _, path := range paths {
+		if fileExists(path) {
+			return filepath.Dir(path)
+		}
+	}
+
+	fail("library path is not found")
+	return ""
+}
+
+func (a RiscV) findLibPath() string {
+	paths := []string{
+		"/usr/lib/riscv64-linux-gnu/crti.o",
+		"/usr/lib64/crti.o",
+		filepath.Join(rvpath, "sysroot/usr/lib/crti.o"),
+	}
+
+	for _, path := range paths {
+		if fileExists(path) {
+			return filepath.Dir(path)
+		}
+	}
+
+	fail("library path is not found")
+	return ""
+}
+
+func (a X64) findGCCLibPath() string {
+	paths := []string{
+		"/usr/lib/gcc/x86_64-linux-gnu/*/crtbegin.o",
+		"/usr/lib/gcc/x86_64-pc-linux-gnu/*/crtbegin.o", // For Gentoo
+		"/usr/lib/gcc/x86_64-redhat-linux/*/crtbegin.o", // For Fedora
+	}
+
+	for i := range paths {
+		path := findFile(paths[i])
+		if len(path) > 0 {
+			return filepath.Dir(path)
+		}
+	}
+
+	fail("gcc library path is not found")
+	return ""
+}
+
+func (a RiscV) findGCCLibPath() string {
+	paths := []string{
+		"/usr/lib/gcc/riscv64-linux-gnu/*/crtbegin.o",
+		"/usr/lib/gcc/riscv64-pc-linux-gnu/*/crtbegin.o", // For Gentoo
+		"/usr/lib/gcc/riscv64-redhat-linux/*/crtbegin.o", // For Fedora
+		filepath.Join(rvpath, "lib/gcc/riscv64-unknown-linux-gnu/*/crtbegin.o"),
+	}
+
+	for i := range paths {
+		path := findFile(paths[i])
+		if len(path) > 0 {
+			return filepath.Dir(path)
+		}
+	}
+
+	fail("gcc library path is not found")
+	return ""
+}
+
+func (a X64) runLinker(inputs []string, output string) {
+	var arr []string
+
+	arr = append(arr, "ld")
+	arr = append(arr, "-o")
+	arr = append(arr, output)
+	arr = append(arr, "-m")
+	arr = append(arr, "elf_x86_64")
+	arr = append(arr, "-dynamic-linker")
+	arr = append(arr, "/lib64/ld-linux-x86-64.so.2")
+
+	libpath := a.findLibPath()
+	gccLibpath := a.findGCCLibPath()
+
+	arr = append(arr, fmt.Sprintf("%s/crt1.o", libpath))
+	arr = append(arr, fmt.Sprintf("%s/crti.o", libpath))
+	arr = append(arr, fmt.Sprintf("%s/crtbegin.o", gccLibpath))
+	arr = append(arr, fmt.Sprintf("-L%s", gccLibpath))
+	arr = append(arr, fmt.Sprintf("-L%s", libpath))
+	arr = append(arr, fmt.Sprintf("-L%s/..", libpath))
+	arr = append(arr, "-L/usr/lib64")
+	arr = append(arr, "-L/lib64")
+	arr = append(arr, "-L/usr/lib/x86_64-linux-gnu")
+	arr = append(arr, "-L/usr/lib/x86_64-pc-linux-gnu")
+	arr = append(arr, "-L/usr/lib/x86_64-redhat-linux")
+	arr = append(arr, "-L/usr/lib")
+	arr = append(arr, "-L/lib")
+
+	arr = append(arr, inputs...)
+
+	arr = append(arr, "-lc")
+	arr = append(arr, "-lgcc")
+	arr = append(arr, "--as-needed")
+	arr = append(arr, "-lgcc_s")
+	arr = append(arr, "--no-as-needed")
+	arr = append(arr, fmt.Sprintf("%s/crtend.o", gccLibpath))
+	arr = append(arr, fmt.Sprintf("%s/crtn.o", libpath))
+
+	runSubprocess(arr)
+}
+
+func (a RiscV) runLinker(inputs []string, output string) {
+	var arr []string
+
+	arr = append(arr, "riscv64-unknown-linux-gnu-ld")
+	arr = append(arr, "-o")
+	arr = append(arr, output)
+	arr = append(arr, "-m")
+	arr = append(arr, "elf64lriscv")
+	arr = append(arr, "-dynamic-linker")
+	arr = append(arr, filepath.Join(rvpath, "sysroot/lib/ld-linux-riscv64-lp64d.so.1"))
+
+	libpath := a.findLibPath()
+	gccLibpath := a.findGCCLibPath()
+
+	arr = append(arr, fmt.Sprintf("%s/crt1.o", libpath))
+	arr = append(arr, fmt.Sprintf("%s/crti.o", libpath))
+	arr = append(arr, fmt.Sprintf("%s/crtbegin.o", gccLibpath))
+	arr = append(arr, fmt.Sprintf("-L%s", gccLibpath))
+	arr = append(arr, fmt.Sprintf("-L%s", libpath))
+	arr = append(arr, fmt.Sprintf("-L%s/..", libpath))
+
+	arr = append(arr, fmt.Sprintf("-L%s/sysroot/usr/lib64", rvpath))
+	arr = append(arr, fmt.Sprintf("-L%s/sysroot/lib64", rvpath))
+	arr = append(arr, fmt.Sprintf("-L%s/sysroot/usr/lib/riscv64-linux-gnu", rvpath))
+	arr = append(arr, fmt.Sprintf("-L%s/sysroot/usr/lib/riscv64-pc-linux-gnu", rvpath))
+	arr = append(arr, fmt.Sprintf("-L%s/sysroot/usr/lib/riscv64-redhat-linux", rvpath))
+	arr = append(arr, fmt.Sprintf("-L%s/sysroot/usr/lib", rvpath))
+	arr = append(arr, fmt.Sprintf("-L%s/sysroot//lib", rvpath))
+
+	arr = append(arr, inputs...)
+
+	arr = append(arr, "-lc")
+	arr = append(arr, "-lgcc")
+	arr = append(arr, "--as-needed")
+	arr = append(arr, "-lgcc_s")
+	arr = append(arr, "--no-as-needed")
+	arr = append(arr, fmt.Sprintf("%s/crtend.o", gccLibpath))
+	arr = append(arr, fmt.Sprintf("%s/crtn.o", libpath))
+
+	runSubprocess(arr)
 }
 
 func main() {
@@ -221,9 +396,11 @@ func main() {
 		return
 	}
 
-	if len(inputPaths) > 1 && len(optO) > 0 {
-		fail("cannot specify '-o' with multiple files")
+	if len(inputPaths) > 1 && len(optO) > 0 && (optC || optS) {
+		fail("cannot specify '-o' with '-c' or '-S' with multiple files")
 	}
+
+	var ldArgs []string
 
 	for i := 0; i < len(inputPaths); i++ {
 		input := inputPaths[i]
@@ -237,15 +414,53 @@ func main() {
 			output = replaceExtn(input, ".o")
 		}
 
-		// If -S is given, assembly text is the final output.
+		// Handle .o
+		if strings.HasSuffix(input, ".o") {
+			ldArgs = append(ldArgs, input)
+			continue
+		}
+
+		// Handle .s
+		if strings.HasSuffix(input, ".s") {
+			if !optS {
+				target.assemble(input, output)
+			}
+			continue
+		}
+
+		// Handle .c
+		if !strings.HasSuffix(input, ".c") && input != "-" {
+			fail("unknown file extension: %s", input)
+		}
+
+		// Just compile
 		if optS {
 			runCC1(os.Args, input, output)
 			continue
 		}
 
-		// Otherwise, run the assembler to assemble our output.
-		tmpfile := createTmpfile()
-		runCC1(os.Args, input, tmpfile)
-		assemble(tmpfile, output)
+		// Compile and assemble
+		if optC {
+			tmp := createTmpfile()
+			runCC1(os.Args, input, tmp)
+			target.assemble(tmp, output)
+			continue
+		}
+
+		// Compile, assemble and link
+		tmp1 := createTmpfile()
+		tmp2 := createTmpfile()
+		runCC1(os.Args, input, tmp1)
+		target.assemble(tmp1, tmp2)
+		ldArgs = append(ldArgs, tmp2)
+		continue
+	}
+
+	if len(ldArgs) > 0 {
+		if len(optO) > 0 {
+			target.runLinker(ldArgs, optO)
+		} else {
+			target.runLinker(ldArgs, "a.out")
+		}
 	}
 }
