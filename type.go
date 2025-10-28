@@ -230,10 +230,11 @@ func (node *Node) addType() {
 		node.ty = node.member.ty
 		return
 	case ND_ADDR:
-		if node.lhs.ty.kind == TY_ARRAY {
-			node.ty = pointerTo(node.lhs.ty.base)
+		ty := node.lhs.ty
+		if ty.kind == TY_ARRAY {
+			node.ty = pointerTo(ty.base)
 		} else {
-			node.ty = pointerTo(node.lhs.ty)
+			node.ty = pointerTo(ty)
 		}
 		return
 	case ND_DEREF:

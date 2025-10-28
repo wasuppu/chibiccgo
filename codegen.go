@@ -247,7 +247,7 @@ func (a X64) popf(reg int) {
 // Load a value from where %rax is pointing to.
 func (a X64) load(ty *Type) {
 	switch ty.kind {
-	case TY_ARRAY, TY_STRUCT, TY_UNION:
+	case TY_ARRAY, TY_STRUCT, TY_UNION, TY_FUNC:
 		return
 	case TY_FLOAT:
 		println("  movss (%%rax), %%xmm0")
@@ -395,13 +395,24 @@ func (a X64) pushArgs(args *Node) {
 func (a X64) genAddr(node *Node) {
 	switch node.kind {
 	case ND_VAR:
+		// Local variable
 		if node.vara.isLocal {
-			// Local variable
 			println("  lea %d(%%rbp), %%rax", node.vara.offset)
-		} else {
-			// Global variable
-			println("  lea %s(%%rip), %%rax", node.vara.name)
+			return
 		}
+
+		// Function
+		if node.ty.kind == TY_FUNC {
+			if node.vara.isDefinition {
+				println("  lea %s(%%rip), %%rax", node.vara.name)
+			} else {
+				println("  mov %s@GOTPCREL(%%rip), %%rax", node.vara.name)
+			}
+			return
+		}
+
+		// Global variable
+		println("  lea %s(%%rip), %%rax", node.vara.name)
 		return
 	case ND_DEREF:
 		a.genExpr(node.lhs)
@@ -552,6 +563,7 @@ func (a X64) genExpr(node *Node) {
 		return
 	case ND_FUNCALL:
 		a.pushArgs(node.args)
+		a.genExpr(node.lhs)
 		gp, fp := 0, 0
 		for arg := node.args; arg != nil; arg = arg.next {
 			if arg.ty.isFlonum() {
@@ -564,10 +576,10 @@ func (a X64) genExpr(node *Node) {
 		}
 
 		if depth%2 == 0 {
-			println("  call %s", node.funcname)
+			println("  call *%%rax")
 		} else {
 			println("  sub $8, %%rsp")
-			println("  call %s", node.funcname)
+			println("  call *%%rax")
 			println("  add $8, %%rsp")
 		}
 
@@ -1001,7 +1013,7 @@ func (a RiscV) popf(reg int) {
 // Load a value from where %rax is pointing to.
 func (a RiscV) load(ty *Type) {
 	switch ty.kind {
-	case TY_ARRAY, TY_STRUCT, TY_UNION:
+	case TY_ARRAY, TY_STRUCT, TY_UNION, TY_FUNC:
 		return
 	case TY_FLOAT:
 		println("  flw fa0, 0(a0)")
@@ -1151,12 +1163,31 @@ func (a RiscV) pushArgs(args *Node) {
 func (a RiscV) genAddr(node *Node) {
 	switch node.kind {
 	case ND_VAR:
+		// Local variable
 		if node.vara.isLocal {
 			println("  li t0, %d", node.vara.offset)
 			println("  add a0, fp, t0")
-		} else {
-			println("  la a0, %s", node.vara.name)
+			return
 		}
+		// Function
+		if node.ty.kind == TY_FUNC {
+			if node.vara.isDefinition {
+				println("  la a0, %s", node.vara.name)
+			} else {
+				c := count()
+				println(".Lpcrel_hi%d:", c)
+
+				println("  auipc a0, %%got_pcrel_hi(%s)", node.vara.name)
+				println("  ld a0, %%pcrel_lo(.Lpcrel_hi%d)(a0)", c)
+			}
+			return
+		}
+
+		// Global variable
+		c := count()
+		println(".Lpcrel_hi%d:", c)
+		println("  auipc a0, %%got_pcrel_hi(%s)", node.vara.name)
+		println("  ld a0, %%pcrel_lo(.Lpcrel_hi%d)(a0)", c)
 		return
 	case ND_DEREF:
 		a.genExpr(node.lhs)
@@ -1305,6 +1336,9 @@ func (a RiscV) genExpr(node *Node) {
 		return
 	case ND_FUNCALL:
 		a.pushArgs(node.args)
+		a.genExpr(node.lhs)
+		println("  mv t5, a0")
+
 		gp, fp := 0, 0
 		curArg := node.functy.params
 		for arg := node.args; arg != nil; arg = arg.next {
@@ -1334,10 +1368,10 @@ func (a RiscV) genExpr(node *Node) {
 		}
 
 		if depth%2 == 0 {
-			println("  call %s", node.funcname)
+			println("  jalr t5")
 		} else {
 			println("  addi sp, sp, -8")
-			println("  call %s", node.funcname)
+			println("  jalr t5")
 			println("  addi sp, sp, 8")
 		}
 

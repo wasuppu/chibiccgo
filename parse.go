@@ -180,9 +180,8 @@ type Node struct {
 	member *Member
 
 	// Function call
-	funcname string
-	functy   *Type
-	args     *Node
+	functy *Type
+	args   *Node
 
 	// Goto or labeled statement
 	label       string
@@ -2347,7 +2346,15 @@ func newIncDec(node *Node, tok *Token, addend int) *Node {
 }
 
 // postfix = "(" type-name ")" "{" initializer-list "}"
-// | primary ("[" expr "]" | "." ident | "->" ident | "++" | "--")*
+// | ident "(" func-args ")" postfix-tail*
+// | primary postfix-tail*
+//
+// postfix-tail = "[" expr "]"
+// | "(" func-args ")"
+// | "." ident
+// | "->" ident
+// | "++"
+// | "--"
 func postfix(rest **Token, tok *Token) *Node {
 	if tok.equal("(") && isTypename(tok.next) {
 		// Compound literal
@@ -2370,6 +2377,11 @@ func postfix(rest **Token, tok *Token) *Node {
 	node := primary(&tok, tok)
 
 	for {
+		if tok.equal("(") {
+			node = funcall(&tok, tok.next, node)
+			continue
+		}
+
 		if tok.equal("[") {
 			// x[y] is short for *(x+y)
 			start := tok
@@ -2410,20 +2422,20 @@ func postfix(rest **Token, tok *Token) *Node {
 	}
 }
 
-// funcall = ident "(" (assign ("," assign)*)? ")"
-func funcall(rest **Token, tok *Token) *Node {
-	start := tok
-	tok = tok.next.next
+// funcall = (assign ("," assign)*)? ")"
+func funcall(rest **Token, tok *Token, fn *Node) *Node {
+	fn.addType()
 
-	sc := findVar(start)
-	if sc == nil {
-		failTok(start, "implicit declaration of a function")
-	}
-	if sc.vara == nil || sc.vara.ty.kind != TY_FUNC {
-		failTok(start, "not a function")
+	if fn.ty.kind != TY_FUNC && (fn.ty.kind != TY_PTR || fn.ty.base.kind != TY_FUNC) {
+		failTok(fn.tok, "not a function")
 	}
 
-	ty := sc.vara.ty
+	var ty *Type
+	if fn.ty.kind == TY_FUNC {
+		ty = fn.ty
+	} else {
+		ty = fn.ty.base
+	}
 	paramty := ty.params
 
 	head := Node{}
@@ -2463,8 +2475,7 @@ func funcall(rest **Token, tok *Token) *Node {
 
 	*rest = tok.skip(")")
 
-	node := NewNode(ND_FUNCALL, start)
-	node.funcname = start.lexeme
+	node := NewUnary(ND_FUNCALL, fn, tok)
 	node.functy = ty
 	node.ty = ty.returnTy
 	node.args = head.next
@@ -2477,7 +2488,7 @@ func funcall(rest **Token, tok *Token) *Node {
 // | "sizeof" unary
 // | "_Alignof" "(" type-name ")"
 // | "_Alignof" unary
-// | ident func-args?
+// | ident
 // | str
 // | num
 func primary(rest **Token, tok *Token) *Node {
@@ -2522,26 +2533,23 @@ func primary(rest **Token, tok *Token) *Node {
 	}
 
 	if tok.kind == TK_IDENT {
-		// Function call
-		if tok.next.equal("(") {
-			return funcall(rest, tok)
-		}
-
 		// Variable or enum constant
 		sc := findVar(tok)
-		if sc == nil || (sc.vara == nil && sc.enumty == nil) {
-			failTok(tok, "undefined variable")
-		}
-
-		var node *Node
-		if sc.vara != nil {
-			node = NewVarNode(sc.vara, tok)
-		} else {
-			node = NewNum(int64(sc.enumval), tok)
-		}
-
 		*rest = tok.next
-		return node
+
+		if sc != nil {
+			if sc.vara != nil {
+				return NewVarNode(sc.vara, tok)
+			}
+			if sc.enumty != nil {
+				return NewNum(int64(sc.enumval), tok)
+			}
+		}
+
+		if tok.next.equal("(") {
+			failTok(tok, "implicit declaration of a function")
+		}
+		failTok(tok, "undefined variable")
 	}
 
 	if tok.kind == TK_STR {
