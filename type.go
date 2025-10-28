@@ -8,6 +8,11 @@ var tyShort = &Type{kind: TY_SHORT, size: 2, align: 2}
 var tyInt = &Type{kind: TY_INT, size: 4, align: 4}
 var tyLong = &Type{kind: TY_LONG, size: 8, align: 8}
 
+var tyUChar = &Type{kind: TY_CHAR, size: 1, align: 1, isUnsigned: true}
+var tyUShort = &Type{kind: TY_SHORT, size: 2, align: 2, isUnsigned: true}
+var tyUInt = &Type{kind: TY_INT, size: 4, align: 4, isUnsigned: true}
+var tyULong = &Type{kind: TY_LONG, size: 8, align: 8, isUnsigned: true}
+
 type TypeKind int
 
 const (
@@ -26,9 +31,10 @@ const (
 )
 
 type Type struct {
-	kind  TypeKind
-	size  int // sizeof() value
-	align int // alignment
+	kind       TypeKind
+	size       int  // sizeof() value
+	align      int  // alignment
+	isUnsigned bool // unsigned or signed
 
 	// Pointer-to or array-of type.
 	base *Type
@@ -95,10 +101,25 @@ func getCommonType(ty1, ty2 *Type) *Type {
 	if ty1.base != nil {
 		return pointerTo(ty1.base)
 	}
-	if ty1.size == 8 || ty2.size == 8 {
-		return tyLong
+	if ty1.size < 4 {
+		ty1 = tyInt
 	}
-	return tyInt
+	if ty2.size < 4 {
+		ty2 = tyInt
+	}
+
+	if ty1.size != ty2.size {
+		if ty1.size < ty2.size {
+			return ty2
+		} else {
+			return ty1
+		}
+	}
+
+	if ty2.isUnsigned {
+		return ty2
+	}
+	return ty1
 }
 
 // This operation is called the "usual arithmetic conversion".

@@ -21,41 +21,82 @@ const (
 	I16
 	I32
 	I64
+	U8
+	U16
+	U32
+	U64
 )
 
 // The table for x64 type casts
-var i32i8 = "movsbl %al, %eax"
-var i32i16 = "movswl %ax, %eax"
-var i32i64 = "movsxd %eax, %rax"
+var i32i8x = "movsbl %al, %eax"
+var i32u8x = "movzbl %al, %eax"
+var i32i16x = "movswl %ax, %eax"
+var i32u16x = "movzwl %ax, %eax"
+var i32i64x = "movsxd %eax, %rax"
+var u32i64x = "mov %eax, %eax"
 
 var x64CastTable = [][]string{
-	{"", "", "", i32i64},        // i8
-	{i32i8, "", "", i32i64},     // i16
-	{i32i8, i32i16, "", i32i64}, // i32
-	{i32i8, i32i16, "", ""},     // i64
+	// i8   i16   i32   i64   u8   u16   u32   u64
+	{"", "", "", i32i64x, i32u8x, i32u16x, "", i32i64x},          // i8
+	{i32i8x, "", "", i32i64x, i32u8x, i32u16x, "", i32i64x},      // i16
+	{i32i8x, i32i16x, "", i32i64x, i32u8x, i32u16x, "", i32i64x}, // i32
+	{i32i8x, i32i16x, "", "", i32u8x, i32u16x, "", ""},           // i64
+	{i32i8x, "", "", i32i64x, "", "", "", i32i64x},               // u8
+	{i32i8x, i32i16x, "", i32i64x, i32u8x, "", "", i32i64x},      // u16
+	{i32i8x, i32i16x, "", u32i64x, i32u8x, i32u16x, "", u32i64x}, // u32
+	{i32i8x, i32i16x, "", "", i32u8x, i32u16x, "", ""},           // u64
 }
 
 // The table for riscv type casts
-var i64i8 = fmt.Sprint("slli a0, a0, 56\n", "  srai a0, a0, 56")
-var i64i16 = fmt.Sprint("slli a0, a0, 48\n", "  srai a0, a0, 48")
-var i64i32 = fmt.Sprint("slli a0, a0, 32\n", "  srai a0, a0, 32")
+var i64i8r = fmt.Sprint("slli a0, a0, 56\n", "  srai a0, a0, 56")
+var i64u8r = fmt.Sprint("slli a0, a0, 56\n", "  srli a0, a0, 56")
+var i64i16r = fmt.Sprint("slli a0, a0, 48\n", "  srai a0, a0, 48")
+var i64u16r = fmt.Sprint("slli a0, a0, 48\n", "  srli a0, a0, 48")
+var i64i32r = fmt.Sprint("slli a0, a0, 32\n", "  srai a0, a0, 32")
+var i64u32r = fmt.Sprint("slli a0, a0, 32\n", "  srli a0, a0, 32")
+
+var u32i64r = fmt.Sprint("slli a0, a0, 32\n", "  srli a0, a0, 32")
+
 var riscvCastTable = [][]string{
-	{"", "", "", ""},
-	{i64i8, "", "", ""},
-	{i64i8, i64i16, "", ""},
-	{i64i8, i64i16, i64i32, ""},
+	// i8   i16   i32   i64   u8   u16   u32   u64
+	{"", "", "", "", i64u8r, i64u16r, i64u32r, ""},                    // i8
+	{i64i8r, "", "", "", i64u8r, i64u16r, i64u32r, ""},                // i16
+	{i64i8r, i64i16r, "", "", i64u8r, i64u16r, i64u32r, ""},           // i32
+	{i64i8r, i64i16r, i64i32r, "", i64u8r, i64u16r, i64u32r, ""},      // i64
+	{i64i8r, "", "", "", "", "", "", ""},                              // u8
+	{i64i8r, i64i16r, "", "", i64u8r, "", "", ""},                     // u16
+	{i64i8r, i64i16r, i64i32r, u32i64r, i64u8r, i64u16r, "", u32i64r}, // u32
+	{i64i8r, i64i16r, i64i32r, "", i64u8r, i64u16r, i64u32r, ""},      // u64
 }
 
 func getTypeId(ty *Type) int {
 	switch ty.kind {
 	case TY_CHAR:
-		return I8
+		if ty.isUnsigned {
+			return U8
+		} else {
+			return I8
+		}
 	case TY_SHORT:
-		return I16
+		if ty.isUnsigned {
+			return U16
+		} else {
+			return I16
+		}
 	case TY_INT:
-		return I32
+		if ty.isUnsigned {
+			return U32
+		} else {
+			return I32
+		}
+	case TY_LONG:
+		if ty.isUnsigned {
+			return U64
+		} else {
+			return I64
+		}
 	}
-	return I64
+	return U64
 }
 
 func chooseArch(arch string) Arch {
@@ -117,11 +158,18 @@ func (a X64) load(ty *Type) {
 		return
 	}
 
+	var insn string
+	if ty.isUnsigned {
+		insn = "movz"
+	} else {
+		insn = "movs"
+	}
+
 	switch ty.size {
 	case 1:
-		println("  movsbl (%%rax), %%eax")
+		println("  %sbl (%%rax), %%eax", insn)
 	case 2:
-		println("  movswl (%%rax), %%eax")
+		println("  %swl (%%rax), %%eax", insn)
 	case 4:
 		println("  movsxd (%%rax), %%rax")
 	default:
@@ -357,10 +405,18 @@ func (a X64) genExpr(node *Node) {
 			println("  movzx %%al, %%eax")
 			return
 		case TY_CHAR:
-			println("  movsbl %%al, %%eax")
+			if node.ty.isUnsigned {
+				println("  movzbl %%al, %%eax")
+			} else {
+				println("  movsbl %%al, %%eax")
+			}
 			return
 		case TY_SHORT:
-			println("  movswl %%ax, %%eax")
+			if node.ty.isUnsigned {
+				println("  movzwl %%ax, %%eax")
+			} else {
+				println("  movswl %%ax, %%eax")
+			}
 			return
 		}
 		return
@@ -371,13 +427,15 @@ func (a X64) genExpr(node *Node) {
 	a.genExpr(node.lhs)
 	a.pop("%rdi")
 
-	var ax, di string
+	var ax, di, dx string
 	if node.lhs.ty.kind == TY_LONG || node.lhs.ty.base != nil {
 		ax = "%rax"
 		di = "%rdi"
+		dx = "%rdx"
 	} else {
 		ax = "%eax"
 		di = "%edi"
+		dx = "%edx"
 	}
 
 	switch node.kind {
@@ -391,12 +449,17 @@ func (a X64) genExpr(node *Node) {
 		println("  imul %s, %s", di, ax)
 		return
 	case ND_DIV, ND_MOD:
-		if node.lhs.ty.size == 8 {
-			println("  cqo")
+		if node.ty.isUnsigned {
+			println("  mov $0, %s", dx)
+			println("  div %s", di)
 		} else {
-			println("  cdq")
+			if node.lhs.ty.size == 8 {
+				println("  cqo")
+			} else {
+				println("  cdq")
+			}
+			println("  idiv %s", di)
 		}
-		println("  idiv %s", di)
 
 		if node.kind == ND_MOD {
 			println("  mov %%rdx, %%rax")
@@ -420,9 +483,17 @@ func (a X64) genExpr(node *Node) {
 		case ND_NE:
 			println("  setne %%al")
 		case ND_LT:
-			println("  setl %%al")
+			if node.lhs.ty.isUnsigned {
+				println("  setb %%al")
+			} else {
+				println("  setl %%al")
+			}
 		case ND_LE:
-			println("  setle %%al")
+			if node.lhs.ty.isUnsigned {
+				println("  setbe %%al")
+			} else {
+				println("  setle %%al")
+			}
 		}
 
 		println("  movzb %%al, %%rax")
@@ -433,8 +504,8 @@ func (a X64) genExpr(node *Node) {
 		return
 	case ND_SHR:
 		println("  mov %%rdi, %%rcx")
-		if node.ty.size == 8 {
-			println("  sar %%cl, %s", ax)
+		if node.lhs.ty.isUnsigned {
+			println("  shr %%cl, %s", ax)
 		} else {
 			println("  sar %%cl, %s", ax)
 		}
@@ -684,13 +755,18 @@ func (a RiscV) load(ty *Type) {
 		return
 	}
 
+	suffix := ""
+	if ty.isUnsigned {
+		suffix = "u"
+	}
+
 	switch ty.size {
 	case 1:
-		println("  lb a0, 0(a0)")
+		println("  lb%s a0, 0(a0)", suffix)
 	case 2:
-		println("  lh a0, 0(a0)")
+		println("  lh%s a0, 0(a0)", suffix)
 	case 4:
-		println("  lw a0, 0(a0)")
+		println("  lw%s a0, 0(a0)", suffix)
 	default:
 		println("  ld a0, 0(a0)")
 	}
@@ -912,12 +988,22 @@ func (a RiscV) genExpr(node *Node) {
 			println("  srli a0, a0, 63")
 			return
 		case TY_CHAR:
-			println("  slli a0, a0, 56")
-			println("  srai a0, a0, 56")
+			if node.ty.isUnsigned {
+				println("  slli a0, a0, 56")
+				println("  srli a0, a0, 56")
+			} else {
+				println("  slli a0, a0, 56")
+				println("  srai a0, a0, 56")
+			}
 			return
 		case TY_SHORT:
-			println("  slli a0, a0, 48")
-			println("  srai a0, a0, 48")
+			if node.ty.isUnsigned {
+				println("  slli a0, a0, 48")
+				println("  srli a0, a0, 48")
+			} else {
+				println("  slli a0, a0, 48")
+				println("  srai a0, a0, 48")
+			}
 			return
 		}
 		return
@@ -943,10 +1029,18 @@ func (a RiscV) genExpr(node *Node) {
 		println("  mul%s a0, a0, a1", suffix)
 		return
 	case ND_DIV:
-		println("  div%s a0, a0, a1", suffix)
+		if node.ty.isUnsigned {
+			println("  divu%s a0, a0, a1", suffix)
+		} else {
+			println("  div%s a0, a0, a1", suffix)
+		}
 		return
 	case ND_MOD:
-		println("  rem%s a0, a0, a1", suffix)
+		if node.ty.isUnsigned {
+			println("  remu%s a0, a0, a1", suffix)
+		} else {
+			println("  rem%s a0, a0, a1", suffix)
+		}
 		return
 	case ND_BITAND:
 		println("  and a0, a0, a1")
@@ -958,6 +1052,16 @@ func (a RiscV) genExpr(node *Node) {
 		println("  xor a0, a0, a1")
 		return
 	case ND_EQ, ND_NE:
+		if node.lhs.ty.isUnsigned && node.lhs.ty.kind == TY_INT {
+			println("slli a0, a0, 32")
+			println("srli a0, a0, 32")
+		}
+
+		if node.rhs.ty.isUnsigned && node.rhs.ty.kind == TY_INT {
+			println("slli a1, a1, 32")
+			println("srli a1, a1, 32")
+		}
+
 		println("  xor a0, a0, a1")
 
 		if node.kind == ND_EQ {
@@ -968,17 +1072,29 @@ func (a RiscV) genExpr(node *Node) {
 
 		return
 	case ND_LT:
-		println("  slt a0, a0, a1")
+		if node.lhs.ty.isUnsigned {
+			println("  sltu a0, a0, a1")
+		} else {
+			println("  slt a0, a0, a1")
+		}
 		return
 	case ND_LE:
-		println("  slt a0, a1, a0")
+		if node.lhs.ty.isUnsigned {
+			println("  sltu a0, a1, a0")
+		} else {
+			println("  slt a0, a1, a0")
+		}
 		println("  xori a0, a0, 1")
 		return
 	case ND_SHL:
 		println("  sll%s a0, a0, a1", suffix)
 		return
 	case ND_SHR:
-		println("  sra%s a0, a0, a1", suffix)
+		if node.ty.isUnsigned {
+			println("  srl%s a0, a0, a1", suffix)
+		} else {
+			println("  sra%s a0, a0, a1", suffix)
+		}
 		return
 	}
 

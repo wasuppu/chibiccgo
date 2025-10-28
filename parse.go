@@ -437,19 +437,20 @@ func getIdent(tok *Token) string {
 }
 
 const (
-	VOID   = 1 << 0
-	BOOL   = 1 << 2
-	CHAR   = 1 << 4
-	SHORT  = 1 << 6
-	INT    = 1 << 8
-	LONG   = 1 << 10
-	OTHER  = 1 << 12
-	SIGNED = 1 << 13
+	VOID     = 1 << 0
+	BOOL     = 1 << 2
+	CHAR     = 1 << 4
+	SHORT    = 1 << 6
+	INT      = 1 << 8
+	LONG     = 1 << 10
+	OTHER    = 1 << 12
+	SIGNED   = 1 << 13
+	UNSIGNED = 1 << 14
 )
 
 // declspec = ("void" | "_Bool" | "char" | "short" | "int" | "long"
 // | "typedef" | "static" | "extern"
-// | "signed"
+// | "signed" | "unsigned"
 // | struct-decl | union-decl | typedef-name
 // | enum-specifier)+
 func declspec(rest **Token, tok *Token, attr *VarAttr) *Type {
@@ -530,6 +531,8 @@ func declspec(rest **Token, tok *Token, attr *VarAttr) *Type {
 			counter += LONG
 		} else if tok.equal("signed") {
 			counter |= SIGNED
+		} else if tok.equal("unsigned") {
+			counter |= UNSIGNED
 		} else {
 			unreachable()
 		}
@@ -541,12 +544,19 @@ func declspec(rest **Token, tok *Token, attr *VarAttr) *Type {
 			ty = tyBool
 		case CHAR, SIGNED + CHAR:
 			ty = tyChar
+		case UNSIGNED + CHAR:
+			ty = tyUChar
 		case SHORT, SHORT + INT,
 			SIGNED + SHORT,
 			SIGNED + SHORT + INT:
 			ty = tyShort
+		case UNSIGNED + SHORT,
+			UNSIGNED + SHORT + INT:
+			ty = tyUShort
 		case INT, SIGNED, SIGNED + INT:
 			ty = tyInt
+		case UNSIGNED, UNSIGNED + INT:
+			ty = tyUInt
 		case LONG, LONG + INT,
 			LONG + LONG,
 			LONG + LONG + INT,
@@ -555,6 +565,11 @@ func declspec(rest **Token, tok *Token, attr *VarAttr) *Type {
 			SIGNED + LONG + LONG,
 			SIGNED + LONG + LONG + INT:
 			ty = tyLong
+		case UNSIGNED + LONG,
+			UNSIGNED + LONG + INT,
+			UNSIGNED + LONG + LONG,
+			UNSIGNED + LONG + LONG + INT:
+			ty = tyULong
 		default:
 			failTok(tok, "invalid type")
 		}
@@ -1175,7 +1190,7 @@ func gvarInitializer(rest **Token, tok *Token, vara *Obj) {
 
 var typenames = []string{
 	"void", "_Bool", "char", "short", "int", "long", "struct", "union",
-	"typedef", "enum", "static", "extern", "_Alignas", "signed",
+	"typedef", "enum", "static", "extern", "_Alignas", "signed", "unsigned",
 }
 
 // Returns true if a given token represents a type.
