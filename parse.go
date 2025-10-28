@@ -690,19 +690,33 @@ func declaration(rest **Token, tok *Token, basety *Type) *Node {
 	return node
 }
 
+func skipExcessElement(tok *Token) *Token {
+	if tok.equal("{") {
+		tok = skipExcessElement(tok.next)
+		return tok.skip("}")
+	}
+
+	assign(&tok, tok)
+	return tok
+}
+
 // initializer = "{" initializer ("," initializer)* "}"
 // | assign
 func initializer2(rest **Token, tok *Token, init *Initializer) {
 	if init.ty.kind == TY_ARRAY {
 		tok = tok.skip("{")
 
-		for i := 0; i < init.ty.arrayLen && !tok.equal("}"); i++ {
+		for i := 0; !consume(rest, tok, "}"); i++ {
 			if i > 0 {
 				tok = tok.skip(",")
 			}
-			initializer2(&tok, tok, init.children[i])
+
+			if i < init.ty.arrayLen {
+				initializer2(&tok, tok, init.children[i])
+			} else {
+				tok = skipExcessElement(tok)
+			}
 		}
-		*rest = tok.skip("}")
 		return
 	}
 
