@@ -31,6 +31,7 @@ const (
 	TY_PTR
 	TY_FUNC
 	TY_ARRAY
+	TY_VLA // variable-length array
 	TY_STRUCT
 	TY_UNION
 )
@@ -51,6 +52,10 @@ type Type struct {
 
 	// Array
 	arrayLen int
+
+	// Variable-length array
+	vlaLen  *Node // # of elements
+	vlaSize *Obj  // sizeof() value
 
 	// Struct
 	members    *Member
@@ -154,6 +159,13 @@ func arrayOf(base *Type, len int) *Type {
 	ty := newType(TY_ARRAY, base.size*len, base.align)
 	ty.base = base
 	ty.arrayLen = len
+	return ty
+}
+
+func vlaOf(base *Type, len *Node) *Type {
+	ty := newType(TY_VLA, 8, 8)
+	ty.base = base
+	ty.vlaLen = len
 	return ty
 }
 
@@ -268,7 +280,7 @@ func (node *Node) addType() {
 		node.ty = tyInt
 		return
 	case ND_FUNCALL:
-		node.ty = tyLong
+		node.ty = node.functy.returnTy
 		return
 	case ND_NOT, ND_LOGOR, ND_LOGAND:
 		node.ty = tyInt

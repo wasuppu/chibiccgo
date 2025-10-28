@@ -30,6 +30,8 @@ var contLabel string
 // a switch statement. Otherwise, NULL.
 var currentSwitch *Node
 
+var builtinAlloca *Obj
+
 // This struct represents a variable initializer. Since initializers
 // can be nested (e.g. `int x[2][2] = {{1, 2}, {3, 4}}`), this struct
 // is a tree data structure.
@@ -735,10 +737,14 @@ func arrayDimensions(rest **Token, tok *Token, ty *Type) *Type {
 		return arrayOf(ty, -1)
 	}
 
-	sz := int32(constExpr(&tok, tok))
+	expr := conditional(&tok, tok)
 	tok = tok.skip("]")
 	ty = typeSuffix(rest, tok, ty)
-	return arrayOf(ty, int(sz))
+
+	if ty.kind == TY_VLA || !isConstExpr(expr) {
+		return vlaOf(ty, expr)
+	}
+	return arrayOf(ty, int(eval(expr)))
 }
 
 // type-suffix = "(" func-params
@@ -908,6 +914,40 @@ func typeofSpecifier(rest **Token, tok *Token) *Type {
 	return ty
 }
 
+// Generate code for computing a VLA size.
+func computeVlaSize(ty *Type, tok *Token) *Node {
+	node := NewNode(ND_NULL_EXPR, tok)
+	if ty.base != nil {
+		node = NewBinary(ND_COMMA, node, computeVlaSize(ty.base, tok), tok)
+	}
+
+	if ty.kind != TY_VLA {
+		return node
+	}
+
+	var baseSz *Node
+	if ty.base.kind == TY_VLA {
+		baseSz = NewVarNode(ty.base.vlaSize, tok)
+	} else {
+		baseSz = NewNum(int64(ty.base.size), tok)
+	}
+
+	ty.vlaSize = NewLVar("", tyULong)
+	expr := NewBinary(ND_ASSIGN, NewVarNode(ty.vlaSize, tok),
+		NewBinary(ND_MUL, ty.vlaLen, baseSz, tok),
+		tok)
+	return NewBinary(ND_COMMA, node, expr, tok)
+}
+
+func newAlloca(sz *Node) *Node {
+	node := NewUnary(ND_FUNCALL, NewVarNode(builtinAlloca, sz.tok), sz.tok)
+	node.functy = builtinAlloca.ty
+	node.ty = builtinAlloca.ty.returnTy
+	node.args = sz
+	sz.addType()
+	return node
+}
+
 // declaration = declspec (declarator ("=" expr)? ("," declarator ("=" expr)?)*)? ";"
 func declaration(rest **Token, tok *Token, basety *Type, attr *VarAttr) *Node {
 	head := Node{}
@@ -935,6 +975,30 @@ func declaration(rest **Token, tok *Token, basety *Type, attr *VarAttr) *Node {
 			if tok.equal("=") {
 				gvarInitializer(&tok, tok.next, vara)
 			}
+			continue
+		}
+
+		// Generate code for computing a VLA size. We need to do this
+		// even if ty is not VLA because ty may be a pointer to VLA
+		// (e.g. int (*foo)[n][m] where n and m are variables.)
+		cur.next = NewUnary(ND_EXPR_STMT, computeVlaSize(ty, tok), tok)
+		cur = cur.next
+
+		if ty.kind == TY_VLA {
+			if tok.equal("=") {
+				failTok(tok, "variable-sized object may not be initialized")
+			}
+
+			// Variable length arrays (VLAs) are translated to alloca() calls.
+			// For example, `int x[n+2]` is translated to `tmp = n + 2,
+			// x = alloca(tmp)`.
+			vara := NewLVar(getIdent(ty.name), ty)
+			tok := ty.name
+			expr := NewBinary(ND_ASSIGN, NewVarNode(vara, tok),
+				newAlloca(NewVarNode(ty.vlaSize, tok)),
+				tok)
+			cur.next = NewUnary(ND_EXPR_STMT, expr, tok)
+			cur = cur.next
 			continue
 		}
 
@@ -2075,6 +2139,46 @@ func evalRVal(node *Node, label *string) int64 {
 	return -1
 }
 
+func isConstExpr(node *Node) bool {
+	node.addType()
+
+	switch node.kind {
+	case ND_ADD,
+		ND_SUB,
+		ND_MUL,
+		ND_DIV,
+		ND_BITAND,
+		ND_BITOR,
+		ND_BITXOR,
+		ND_SHL,
+		ND_SHR,
+		ND_EQ,
+		ND_NE,
+		ND_LT,
+		ND_LE,
+		ND_LOGAND,
+		ND_LOGOR:
+		return isConstExpr(node.lhs) && isConstExpr(node.rhs)
+	case ND_COND:
+		if !isConstExpr(node.cond) {
+			return false
+		}
+		if eval(node.cond) != 0 {
+			return isConstExpr(node.then)
+		} else {
+			return isConstExpr(node.els)
+		}
+	case ND_COMMA:
+		return isConstExpr(node.rhs)
+	case ND_NEG, ND_NOT, ND_BITNOT, ND_CAST:
+		return isConstExpr(node.lhs)
+	case ND_NUM:
+		return true
+	}
+
+	return false
+}
+
 func constExpr(rest **Token, tok *Token) int64 {
 	node := conditional(rest, tok)
 	return eval(node)
@@ -3027,12 +3131,18 @@ func primary(rest **Token, tok *Token) *Node {
 	if tok.equal("sizeof") && tok.next.equal("(") && isTypename(tok.next.next) {
 		ty := typename(&tok, tok.next.next)
 		*rest = tok.skip(")")
+		if ty.kind == TY_VLA {
+			return NewVarNode(ty.vlaSize, tok)
+		}
 		return NewULong(int64(ty.size), start)
 	}
 
 	if tok.equal("sizeof") {
 		node := unary(rest, tok.next)
 		node.addType()
+		if node.ty.kind == TY_VLA {
+			return NewVarNode(node.ty.vlaSize, tok)
+		}
 		return NewULong(int64(node.ty.size), tok)
 	}
 
@@ -3347,8 +3457,8 @@ func scanGlobals() {
 func declareBuiltinFunctions() {
 	ty := funcType(pointerTo(tyVoid))
 	ty.params = copyType(tyInt)
-	builtin := NewGVar("alloca", ty)
-	builtin.isDefinition = false
+	builtinAlloca = NewGVar("alloca", ty)
+	builtinAlloca.isDefinition = false
 }
 
 // program = (typedef | function-definition | global-variable)*
