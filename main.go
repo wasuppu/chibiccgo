@@ -42,6 +42,30 @@ func takeArg(arg string) bool {
 	return false
 }
 
+func (a X64) addDefaultIncludePaths(argv0 string) {
+	// We expect that chibicc-specific include files are installed
+	// to ./include relative to argv[0].
+	includePaths = append(includePaths, filepath.Join(filepath.Dir(argv0), "include"))
+
+	// Add standard include paths.
+	includePaths = append(includePaths, "/usr/local/include")
+	includePaths = append(includePaths, "/usr/include/x86_64-linux-gnu")
+	includePaths = append(includePaths, "/usr/include")
+}
+
+func (a RiscV) addDefaultIncludePaths(argv0 string) {
+	// We expect that chibicc-specific include files are installed
+	// to ./include relative to argv[0].
+	includePaths = append(includePaths, filepath.Join(filepath.Dir(argv0), "include"))
+
+	// Add standard include paths.
+	includePaths = append(includePaths, "/usr/local/include")
+	includePaths = append(includePaths, "/usr/include/riscv64-linux-gnu")
+	includePaths = append(includePaths, filepath.Join(rvpath, "riscv64-unknown-linux-gnu/include"))
+	includePaths = append(includePaths, "/usr/include")
+	includePaths = append(includePaths, filepath.Join(rvpath, "sysroot/usr/include"))
+}
+
 func parseArgs(args []string) {
 	// Make sure that all command line options that take an argument
 	// have an argument.
@@ -445,6 +469,7 @@ func main() {
 	target := chooseArch(optMarch)
 
 	if optCC1 {
+		target.addDefaultIncludePaths(os.Args[0])
 		cc1(target)
 		return
 	}

@@ -198,6 +198,7 @@ type Arch interface {
 	emitData(prog *Obj)
 	assemble(input, output string)
 	runLinker(inputs []string, output string)
+	addDefaultIncludePaths(argv0 string)
 }
 
 type X64 struct{}
