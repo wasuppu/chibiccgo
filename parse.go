@@ -216,9 +216,13 @@ type Node struct {
 	uniqueLabel string
 	gotoNext    *Node
 
-	// Switch-cases
+	// Switch
 	caseNext    *Node
 	defaultCase *Node
+
+	// Case
+	begin int64
+	end   int64
 
 	// "asm" string literal
 	asmStr string
@@ -1667,7 +1671,7 @@ func asmStmt(rest **Token, tok *Token) *Node {
 // stmt = "return" expr? ";"
 // | "if" "(" expr ")" stmt ("else" stmt)?
 // | "switch" "(" expr ")" stmt
-// | "case" const-expr ":" stmt
+// | "case" const-expr ("..." const-expr)? ":" stmt
 // | "default" ":" stmt
 // | "for" "(" expr-stmt expr? ";" expr? ")" stmt
 // | "while" "(" expr ")" stmt
@@ -1737,11 +1741,24 @@ func stmt(rest **Token, tok *Token) *Node {
 		}
 
 		node := NewNode(ND_CASE, tok)
-		val := int32(constExpr(&tok, tok.next))
+		begin := int32(constExpr(&tok, tok.next))
+		var end int32
+
+		if tok.equal("...") {
+			// [GNU] Case ranges, e.g. "case 1 ... 5:"
+			end = int32(constExpr(&tok, tok.next))
+			if end < begin {
+				failTok(tok, "empty case range specified")
+			}
+		} else {
+			end = begin
+		}
+
 		tok = tok.skip(":")
 		node.label = newUniqueName()
 		node.lhs = stmt(rest, tok)
-		node.val = int64(val)
+		node.begin = int64(begin)
+		node.end = int64(end)
 		node.caseNext = currentSwitch.caseNext
 		currentSwitch.caseNext = node
 		return node

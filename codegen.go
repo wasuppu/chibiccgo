@@ -1318,14 +1318,26 @@ func (a X64) genStmt(node *Node) {
 		a.genExpr(node.cond)
 
 		for n := node.caseNext; n != nil; n = n.caseNext {
-			var reg string
+			var ax, di string
 			if node.cond.ty.size == 8 {
-				reg = "%rax"
+				ax = "%rax"
+				di = "%rdi"
 			} else {
-				reg = "%eax"
+				ax = "%eax"
+				di = "%edi"
 			}
-			println("  cmp $%d, %s", n.val, reg)
-			println("  je %s", n.label)
+
+			if n.begin == n.end {
+				println("  cmp $%d, %s", n.begin, ax)
+				println("  je %s", n.label)
+				continue
+			}
+
+			// [GNU] Case ranges
+			println("  mov %s, %s", ax, di)
+			println("  sub $%d, %s", n.begin, di)
+			println("  cmp $%d, %s", n.end-n.begin, di)
+			println("  jbe %s", n.label)
 		}
 
 		if node.defaultCase != nil {
