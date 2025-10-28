@@ -989,6 +989,7 @@ func (a RiscV) pushf() {
 
 func (a RiscV) popf(reg int) {
 	println("  fld fa%d, 0(sp)", reg)
+	println("  ld a%d, 0(sp)", reg)
 	println("  addi sp,sp,8")
 	depth--
 }

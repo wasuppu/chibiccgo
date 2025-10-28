@@ -1964,7 +1964,7 @@ func newAdd(lhs, rhs *Node, tok *Token) *Node {
 	rhs.addType()
 
 	// num + num
-	if lhs.ty.isInteger() && rhs.ty.isInteger() {
+	if lhs.ty.isNumeric() && rhs.ty.isNumeric() {
 		return NewBinary(ND_ADD, lhs, rhs, tok)
 	}
 
@@ -1988,7 +1988,7 @@ func newSub(lhs, rhs *Node, tok *Token) *Node {
 	rhs.addType()
 
 	// num - num
-	if lhs.ty.isInteger() && rhs.ty.isInteger() {
+	if lhs.ty.isNumeric() && rhs.ty.isNumeric() {
 		return NewBinary(ND_SUB, lhs, rhs, tok)
 	}
 
@@ -2390,6 +2390,10 @@ func funcall(rest **Token, tok *Token) *Node {
 			}
 			arg = NewCast(arg, paramty)
 			paramty = paramty.next
+		} else if arg.ty.kind == TY_FLOAT {
+			// If parameter type is omitted (e.g. in "..."), float
+			// arguments are promoted to double.
+			arg = NewCast(arg, tyDouble)
 		}
 
 		cur.next = arg
