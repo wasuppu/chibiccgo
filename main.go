@@ -121,6 +121,40 @@ func parseOptX(s string) FileType {
 	return -1
 }
 
+func quoteMakefile(s string) string {
+	buf := make([]byte, len(s)*2+1)
+
+	for i, j := 0, 0; i < len(s); i++ {
+		switch s[i] {
+		case '$':
+			buf[j] = '$'
+			j++
+			buf[j] = '$'
+			j++
+		case '#':
+			buf[j] = '\\'
+			j++
+			buf[j] = '#'
+			j++
+		case ' ':
+		case '\t':
+			for k := i - 1; k >= 0 && s[k] == '\\'; k-- {
+				buf[j] = '\\'
+				j++
+			}
+			buf[j] = '\\'
+			j++
+			buf[j] = s[i]
+			j++
+		default:
+			buf[j] = s[i]
+			j++
+		}
+	}
+
+	return strings.Trim(string(buf), "\x00")
+}
+
 func parseArgs(args []string) {
 	// Make sure that all command line options that take an argument
 	// have an argument.
@@ -273,6 +307,16 @@ func parseArgs(args []string) {
 
 		if args[i] == "-MD" {
 			optMD = true
+			continue
+		}
+
+		if args[i] == "-MQ" {
+			i++
+			if len(optMT) == 0 {
+				optMT = quoteMakefile(args[i])
+			} else {
+				optMT = fmt.Sprintf("%s %s", optMT, quoteMakefile(args[i]))
+			}
 			continue
 		}
 
@@ -465,7 +509,7 @@ func printDependencies() {
 	if len(optMT) > 0 {
 		fmt.Fprintf(out, "%s:", optMT)
 	} else {
-		fmt.Fprintf(out, "%s:", replaceExtn(basefile, ".o"))
+		fmt.Fprintf(out, "%s:", quoteMakefile(replaceExtn(basefile, ".o")))
 	}
 
 	files := inputfiles
@@ -476,7 +520,7 @@ func printDependencies() {
 
 	if optMP {
 		for i := 1; files[i] != nil; i++ {
-			fmt.Fprintf(out, "%s:\n\n", files[i].name)
+			fmt.Fprintf(out, "%s:\n\n", quoteMakefile(files[i].name))
 		}
 	}
 
