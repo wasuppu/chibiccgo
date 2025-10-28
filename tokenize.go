@@ -16,7 +16,7 @@ var currentFilename string
 
 var kws = []string{
 	"return", "if", "else", "for", "while", "int", "sizeof", "char",
-	"struct", "union",
+	"struct", "union", "long",
 }
 
 var puncts = []string{"==", "!=", "<=", ">=", "->"}
@@ -37,7 +37,7 @@ const (
 type Token struct {
 	kind   TokenKind // Token kind
 	next   *Token    // Next token
-	val    int       // If kind is TK_NUM, its value
+	val    int64     // If kind is TK_NUM, its value
 	loc    int       // Token location
 	len    int       // Token length
 	lexeme string    // Token lexeme value in string
@@ -279,7 +279,7 @@ func tokenize(filename string, input string) *Token {
 			n, np := parseNumber(input, p)
 			cur.next = NewToken(TK_NUM, p, np-p, input[p:np])
 			cur = cur.next
-			cur.val = n
+			cur.val = int64(n)
 			p = np
 			continue
 		}

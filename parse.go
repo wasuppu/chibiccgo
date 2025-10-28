@@ -97,8 +97,8 @@ type Node struct {
 	funcname string
 	args     *Node
 
-	vara *Obj // Used if kind == ND_VAR
-	val  int  // Used if kind == ND_NUM
+	vara *Obj  // Used if kind == ND_VAR
+	val  int64 // Used if kind == ND_NUM
 }
 
 // Scope for local or global variables.
@@ -194,7 +194,7 @@ func NewUnary(kind NodeKind, expr *Node, tok *Token) *Node {
 	return node
 }
 
-func NewNum(val int, tok *Token) *Node {
+func NewNum(val int64, tok *Token) *Node {
 	return &Node{
 		kind: ND_NUM,
 		tok:  tok,
@@ -261,10 +261,10 @@ func getNumber(tok *Token) int {
 	if tok.kind != TK_NUM {
 		failTok(tok, "expected a number")
 	}
-	return tok.val
+	return int(tok.val)
 }
 
-// declspec = "char" | "int" | struct-decl
+// declspec = "char" | "int" | "long" | struct-decl | union-decl
 func declspec(rest **Token, tok *Token) *Type {
 	if tok.equal("char") {
 		*rest = tok.next
@@ -274,6 +274,11 @@ func declspec(rest **Token, tok *Token) *Type {
 	if tok.equal("int") {
 		*rest = tok.next
 		return tyInt
+	}
+
+	if tok.equal("long") {
+		*rest = tok.next
+		return tyLong
 	}
 
 	if tok.equal("struct") {
@@ -380,8 +385,8 @@ func declaration(rest **Token, tok *Token) *Node {
 
 // Returns true if a given token represents a type.
 func isTypename(tok *Token) bool {
-	return tok.equal("char") || tok.equal("int") || tok.equal("struct") ||
-		tok.equal("union")
+	return tok.equal("char") || tok.equal("int") || tok.equal("long") ||
+		tok.equal("struct") || tok.equal("union")
 }
 
 // stmt = "return" expr ";"
@@ -589,7 +594,7 @@ func newAdd(lhs, rhs *Node, tok *Token) *Node {
 	}
 
 	// ptr + num
-	rhs = NewBinary(ND_MUL, rhs, NewNum(lhs.ty.base.size, tok), tok)
+	rhs = NewBinary(ND_MUL, rhs, NewNum(int64(lhs.ty.base.size), tok), tok)
 	return NewBinary(ND_ADD, lhs, rhs, tok)
 }
 
@@ -605,7 +610,7 @@ func newSub(lhs, rhs *Node, tok *Token) *Node {
 
 	// ptr - num
 	if lhs.ty.base != nil && rhs.ty.isInteger() {
-		rhs = NewBinary(ND_MUL, rhs, NewNum(lhs.ty.base.size, tok), tok)
+		rhs = NewBinary(ND_MUL, rhs, NewNum(int64(lhs.ty.base.size), tok), tok)
 		rhs.addType()
 		node := NewBinary(ND_SUB, lhs, rhs, tok)
 		node.ty = lhs.ty
@@ -616,7 +621,7 @@ func newSub(lhs, rhs *Node, tok *Token) *Node {
 	if lhs.ty.base != nil && rhs.ty.base != nil {
 		node := NewBinary(ND_SUB, lhs, rhs, tok)
 		node.ty = tyInt
-		return NewBinary(ND_DIV, node, NewNum(lhs.ty.base.size, tok), tok)
+		return NewBinary(ND_DIV, node, NewNum(int64(lhs.ty.base.size), tok), tok)
 	}
 
 	failTok(tok, "invalid operands")
@@ -890,7 +895,7 @@ func primary(rest **Token, tok *Token) *Node {
 	if tok.equal("sizeof") {
 		node := unary(rest, tok.next)
 		node.addType()
-		return NewNum(node.ty.size, tok)
+		return NewNum(int64(node.ty.size), tok)
 	}
 
 	if tok.kind == TK_IDENT {

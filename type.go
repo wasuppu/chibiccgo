@@ -1,13 +1,15 @@
 package main
 
 var tyChar = &Type{kind: TY_CHAR, size: 1, align: 1}
-var tyInt = &Type{kind: TY_INT, size: 8, align: 8}
+var tyInt = &Type{kind: TY_INT, size: 4, align: 4}
+var tyLong = &Type{kind: TY_LONG, size: 8, align: 8}
 
 type TypeKind int
 
 const (
 	TY_CHAR TypeKind = iota
 	TY_INT
+	TY_LONG
 	TY_PTR
 	TY_FUNC
 	TY_ARRAY
@@ -38,7 +40,7 @@ type Type struct {
 	next     *Type
 }
 
-func newType(kind TypeKind, size, align int) *Type {
+func newType(kind TypeKind, size int, align int) *Type {
 	return &Type{
 		kind:  kind,
 		size:  size,
@@ -47,7 +49,8 @@ func newType(kind TypeKind, size, align int) *Type {
 }
 
 func (ty Type) isInteger() bool {
-	return ty.kind == TY_CHAR || ty.kind == TY_INT
+	k := ty.kind
+	return k == TY_CHAR || k == TY_INT || k == TY_LONG
 }
 
 func copyType(ty *Type) *Type {
@@ -104,7 +107,7 @@ func (node *Node) addType() {
 		node.ty = node.lhs.ty
 		return
 	case ND_EQ, ND_NE, ND_LT, ND_LE, ND_NUM, ND_FUNCALL:
-		node.ty = tyInt
+		node.ty = tyLong
 		return
 	case ND_VAR:
 		node.ty = node.vara.ty
