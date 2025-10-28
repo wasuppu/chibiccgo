@@ -10,6 +10,7 @@ var depth int
 var currentGenFn *Obj
 
 var argReg8x = []string{"%dil", "%sil", "%dl", "%cl", "%r8b", "%r9b"}
+var argReg16x = []string{"%di", "%si", "%dx", "%cx", "%r8w", "%r9w"}
 var argReg32x = []string{"%edi", "%esi", "%edx", "%ecx", "%r8d", "%r9d"}
 var argReg64x = []string{"%rdi", "%rsi", "%rdx", "%rcx", "%r8", "%r9"}
 var argRegR = []string{"a0", "a1", "a2", "a3", "a4", "a5"}
@@ -69,6 +70,8 @@ func (a X64) load(ty *Type) {
 	switch ty.size {
 	case 1:
 		println("  movsbq (%%rax), %%rax")
+	case 2:
+		println("  movswq (%%rax), %%rax")
 	case 4:
 		println("  movsxd (%%rax), %%rax")
 	default:
@@ -91,6 +94,8 @@ func (a X64) store(ty *Type) {
 	switch ty.size {
 	case 1:
 		println("  mov %%al, (%%rdi)")
+	case 2:
+		println("  mov %%ax, (%%rdi)")
 	case 4:
 		println("  mov %%eax, (%%rdi)")
 	default:
@@ -102,6 +107,9 @@ func (a X64) storeGP(r, offset, sz int) {
 	switch sz {
 	case 1:
 		println("  mov %s, %d(%%rbp)", argReg8x[r], offset)
+		return
+	case 2:
+		println("  mov %s, %d(%%rbp)", argReg16x[r], offset)
 		return
 	case 4:
 		println("  mov %s, %d(%%rbp)", argReg32x[r], offset)
@@ -360,6 +368,8 @@ func (a RiscV) load(ty *Type) {
 	switch ty.size {
 	case 1:
 		println("  lb a0, 0(a0)")
+	case 2:
+		println("  lh a0, 0(a0)")
 	case 4:
 		println("  lw a0, 0(a0)")
 	default:
@@ -387,6 +397,8 @@ func (a RiscV) store(ty *Type) {
 	switch ty.size {
 	case 1:
 		println("  sb a0, 0(a1)")
+	case 2:
+		println("  sh a0, 0(a1)")
 	case 4:
 		println("  sw a0, 0(a1)")
 	default:
@@ -398,6 +410,9 @@ func (a RiscV) storeGP(r, offset, sz int) {
 	switch sz {
 	case 1:
 		println("  sb %s, %d(fp)", argRegR[r], offset)
+		return
+	case 2:
+		println("  sh %s, %d(fp)", argRegR[r], offset)
 		return
 	case 4:
 		println("  sw %s, %d(fp)", argRegR[r], offset)

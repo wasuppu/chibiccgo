@@ -264,11 +264,16 @@ func getNumber(tok *Token) int {
 	return int(tok.val)
 }
 
-// declspec = "char" | "int" | "long" | struct-decl | union-decl
+// declspec = "char" | "short" | "int" | "long" | struct-decl | union-decl
 func declspec(rest **Token, tok *Token) *Type {
 	if tok.equal("char") {
 		*rest = tok.next
 		return tyChar
+	}
+
+	if tok.equal("short") {
+		*rest = tok.next
+		return tyShort
 	}
 
 	if tok.equal("int") {
@@ -385,8 +390,8 @@ func declaration(rest **Token, tok *Token) *Node {
 
 // Returns true if a given token represents a type.
 func isTypename(tok *Token) bool {
-	return tok.equal("char") || tok.equal("int") || tok.equal("long") ||
-		tok.equal("struct") || tok.equal("union")
+	return tok.equal("char") || tok.equal("short") || tok.equal("int") ||
+		tok.equal("long") || tok.equal("struct") || tok.equal("union")
 }
 
 // stmt = "return" expr ";"
