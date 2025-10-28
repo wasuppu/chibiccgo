@@ -226,6 +226,7 @@ func (a X64) prologue(fname string, stackSize int, isStatic bool) {
 	println("  push %%rbp")
 	println("  mov %%rsp, %%rbp")
 	println("  sub $%d, %%rsp", stackSize)
+
 }
 
 func (a X64) epilogue(fname string) {
@@ -707,6 +708,34 @@ func (a X64) genAddr(node *Node) {
 	failTok(node.tok, "not an lvalue")
 }
 
+func (a X64) builtinAlloca() {
+	// Align size to 16 bytes.
+	println("  add $15, %%rdi")
+	println("  and $0xfffffff0, %%edi")
+
+	// Shift the temporary area by %rdi.
+	println("  mov %d(%%rbp), %%rcx", currentGenFn.allocaBottom.offset)
+	println("  sub %%rsp, %%rcx")
+	println("  mov %%rsp, %%rax")
+	println("  sub %%rdi, %%rsp")
+	println("  mov %%rsp, %%rdx")
+	println("1:")
+	println("  cmp $0, %%rcx")
+	println("  je 2f")
+	println("  mov (%%rax), %%r8b")
+	println("  mov %%r8b, (%%rdx)")
+	println("  inc %%rdx")
+	println("  inc %%rax")
+	println("  dec %%rcx")
+	println("  jmp 1b")
+	println("2:")
+
+	// Move alloca_bottom pointer.
+	println("  mov %d(%%rbp), %%rax", currentGenFn.allocaBottom.offset)
+	println("  sub %%rdi, %%rax")
+	println("  mov %%rax, %d(%%rbp)", currentGenFn.allocaBottom.offset)
+}
+
 // Generate code for a given node.
 func (a X64) genExpr(node *Node) {
 	println("  .loc %d %d", node.tok.file.fileno, node.tok.lineno)
@@ -877,6 +906,13 @@ func (a X64) genExpr(node *Node) {
 		println(".L.end.%d:", c)
 		return
 	case ND_FUNCALL:
+		if node.lhs.kind == ND_VAR && node.lhs.vara.name == "alloca" {
+			a.genExpr(node.args)
+			println("  mov %%rax, %%rdi")
+			a.builtinAlloca()
+			return
+		}
+
 		stackArgs := a.pushArgs(node)
 		a.genExpr(node.lhs)
 		gp, fp := 0, 0
@@ -1253,6 +1289,7 @@ func (a X64) emitText(prog *Obj) {
 
 		// Prologue
 		a.prologue(fn.name, fn.stackSize, fn.isStatic)
+		println("  mov %%rsp, %d(%%rbp)", fn.allocaBottom.offset)
 		currentGenFn = fn
 
 		// Save arg registers if function is variadic

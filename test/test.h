@@ -19,3 +19,5 @@ int vsprintf(char *buf, char *fmt, void *ap);
 int vsprintf();
 // c220
 long strlen(char *s);
+// c271
+void *memcpy(void *dest, void *src, long n);

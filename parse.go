@@ -102,12 +102,13 @@ type Obj struct {
 	rel         *Relocation
 
 	// Function
-	isInline  bool
-	params    *Obj
-	body      *Node
-	locals    *Obj
-	vaArea    *Obj
-	stackSize int
+	isInline     bool
+	params       *Obj
+	body         *Node
+	locals       *Obj
+	vaArea       *Obj
+	allocaBottom *Obj
+	stackSize    int
 
 	// Static inline function
 	isLive bool
@@ -3251,6 +3252,7 @@ func function(tok *Token, basety *Type, attr *VarAttr) *Token {
 			fail("invalid arch:", ArchName)
 		}
 	}
+	fn.allocaBottom = NewLVar("__alloca_size__", pointerTo(tyChar))
 
 	tok = tok.skip("{")
 	// [https://www.sigbus.info/n1570#6.4.2.2p1] "__func__" is
@@ -3342,8 +3344,16 @@ func scanGlobals() {
 	globals = head.next
 }
 
+func declareBuiltinFunctions() {
+	ty := funcType(pointerTo(tyVoid))
+	ty.params = copyType(tyInt)
+	builtin := NewGVar("alloca", ty)
+	builtin.isDefinition = false
+}
+
 // program = (typedef | function-definition | global-variable)*
 func parse(tok *Token) *Obj {
+	declareBuiltinFunctions()
 	globals = nil
 
 	for tok.kind != TK_EOF {
