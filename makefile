@@ -37,10 +37,9 @@ SCOBJS=$(notdir $(SCSRCS:.c=.o))
 stage2/chibicc: $(SCOBJS:%=stage2/%)
 	$(CC) $(CFLAGS) $(FLAG) -o $@ $^ $(LDFLAGS)
 
-stage2/%.o: chibicc self.py ./source/%.c
+stage2/%.o: chibicc ./source/%.c
 	mkdir -p stage2/test
-	./self.py ./source/chibicc.h ./source/$*.c > stage2/$*.c
-	./chibicc -march=$(ARCH) -c -o stage2/$*.o stage2/$*.c
+	./chibicc -march=$(ARCH) -c -o $(@D)/$*.o ./source/$*.c
 
 stage2/test/%.exe: stage2/chibicc test/%.c
 	mkdir -p stage2/test
@@ -58,8 +57,8 @@ x64:
 
 riscv:
 	$(MAKE) clean
-# 	$(MAKE) test ARCH=riscv
-	$(MAKE) stage2/chibicc ARCH=riscv
+ 	$(MAKE) test ARCH=riscv
+# 	$(MAKE) stage2/chibicc ARCH=riscv
 # 	$(MAKE) test-stage2 ARCH=riscv
 
 # Stage 2
