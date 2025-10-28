@@ -1,6 +1,9 @@
 package main
 
-import "path/filepath"
+import (
+	"path/filepath"
+	"strings"
+)
 
 func isHash(tok *Token) bool {
 	return tok.atBol && tok.equal("#")
@@ -68,12 +71,20 @@ func preprocess2(tok *Token) *Token {
 				failTok(tok, "expected a filename")
 			}
 
-			path := filepath.Join(filepath.Base(tok.file.name), tok.str)
+			var path string
+			if tok.str[0] == '/' {
+				path = strings.Trim(tok.str, string('\x00'))
+			} else {
+				path = filepath.Join(filepath.Dir(tok.file.name), strings.Trim(tok.str, string('\x00')))
+			}
+
 			tok2 := tokenizeFile(path)
+
 			if tok2 == nil {
 				failTok(tok, "fail to tokenize %s", path)
 			}
 			tok = skipLine(tok.next)
+
 			tok = tok2.append(tok)
 			continue
 		}

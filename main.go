@@ -8,6 +8,7 @@ import (
 	"strings"
 )
 
+var optE bool
 var optS bool
 var optC bool
 var optCC1 bool
@@ -82,6 +83,11 @@ func parseArgs(args []string) {
 
 		if args[i] == "-c" {
 			optC = true
+			continue
+		}
+
+		if args[i] == "-E" {
+			optE = true
 			continue
 		}
 
@@ -194,6 +200,26 @@ func runCC1(args []string, input, output string) {
 	runSubprocess(args)
 }
 
+// Print tokens to stdout. Used for -E.
+func printTokens(tok *Token) {
+	var out *os.File
+	if len(optO) > 0 {
+		out = openFile(optO)
+	} else {
+		out = openFile("-")
+	}
+
+	line := 1
+	for ; tok.kind != TK_EOF; tok = tok.next {
+		if line > 1 && tok.atBol {
+			fmt.Fprintf(out, "\n")
+		}
+		fmt.Fprintf(out, " %.*s", tok.len, currentFile.contents[tok.loc:])
+		line++
+	}
+	fmt.Fprintf(out, "\n")
+}
+
 func cc1(target Arch) {
 	// Tokenize and parse.
 	tok := tokenizeFile(basefile)
@@ -201,6 +227,13 @@ func cc1(target Arch) {
 		fail("fail to tokenize %s", basefile)
 	}
 	tok = preprocess(tok)
+
+	// If -E is given, print out preprocessed C code as a result.
+	if optE {
+		printTokens(tok)
+		return
+	}
+
 	prog := parse(tok)
 
 	// Traverse the AST to emit assembly.
@@ -399,8 +432,8 @@ func main() {
 		return
 	}
 
-	if len(inputPaths) > 1 && len(optO) > 0 && (optC || optS) {
-		fail("cannot specify '-o' with '-c' or '-S' with multiple files")
+	if len(inputPaths) > 1 && len(optO) > 0 && (optC || optS || optE) {
+		fail("cannot specify '-o' with '-c,' '-S' or '-E' with multiple files")
 	}
 
 	var ldArgs []string
@@ -436,7 +469,13 @@ func main() {
 			fail("unknown file extension: %s", input)
 		}
 
-		// Just compile
+		// Just preprocess
+		if optE {
+			runCC1(os.Args, input, "")
+			continue
+		}
+
+		// compile
 		if optS {
 			runCC1(os.Args, input, output)
 			continue

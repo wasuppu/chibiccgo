@@ -240,7 +240,11 @@ func readStringLiteral(start int) *Token {
 
 	tok := NewToken(TK_STR, start, end+1-start, source[start:end+1])
 	tok.ty = arrayOf(tyChar, len+1)
-	tok.str = fmt.Sprintf("%s\x00", buf)
+	if !strings.HasSuffix(string(buf), "\x00") {
+		tok.str = fmt.Sprintf("%s\x00", buf)
+	} else {
+		tok.str = string(buf)
+	}
 	return tok
 }
 
@@ -542,6 +546,7 @@ func readFile(path string) string {
 	} else {
 		data, err = os.ReadFile(path)
 	}
+
 	if err != nil {
 		return ""
 	}
@@ -557,6 +562,7 @@ var fileno int
 
 func tokenizeFile(path string) *Token {
 	p := readFile(path)
+
 	if len(p) == 0 {
 		return nil
 	}
