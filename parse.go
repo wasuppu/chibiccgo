@@ -2234,7 +2234,12 @@ func unary(rest **Token, tok *Token) *Node {
 	}
 
 	if tok.equal("&") {
-		return NewUnary(ND_ADDR, cast(rest, tok.next), tok)
+		lhs := cast(rest, tok.next)
+		lhs.addType()
+		if lhs.kind == ND_MEMBER && lhs.member.isBitfield {
+			failTok(tok, "cannot take address of bitfield")
+		}
+		return NewUnary(ND_ADDR, lhs, tok)
 	}
 
 	if tok.equal("*") {
