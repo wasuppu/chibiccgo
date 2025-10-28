@@ -8,6 +8,25 @@ import (
 	"strings"
 )
 
+func unreachable() {
+	_, file, line, ok := runtime.Caller(1)
+	if !ok {
+		panic("failed to get caller info")
+	}
+
+	fileContent, err := os.ReadFile(file)
+	if err != nil {
+		panic(fmt.Sprintf("failed to read file: %v", err))
+	}
+
+	lines := strings.Split(string(fileContent), "\n")
+	if line-1 >= len(lines) {
+		panic("invalid line number")
+	}
+
+	fail("internal error at %s:%d", filepath.Base(file), line)
+}
+
 // Reports an error and exit.
 func fail(format string, args ...any) {
 	fmt.Fprintf(os.Stderr, format+"\n", args...)
