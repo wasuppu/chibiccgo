@@ -70,4 +70,9 @@ assert 0 '1>=2;'
 # c9
 assert 3 '1; 2; 3;'
 
+# c10
+assert 3 'a=3; a;'
+assert 8 'a=3; z=5; a+z;'
+assert 6 'a=b=3; a+b;'
+
 echo OK

@@ -30,9 +30,15 @@ type X64 struct{}
 func (a X64) prologue() {
 	fmt.Printf("  .globl main\n")
 	fmt.Printf("main:\n")
+
+	fmt.Printf("  push %%rbp\n")
+	fmt.Printf("  mov %%rsp, %%rbp\n")
+	fmt.Printf("  sub $208, %%rsp\n")
 }
 
 func (a X64) epilogue() {
+	fmt.Printf("  mov %%rbp, %%rsp\n")
+	fmt.Printf("  pop %%rbp\n")
 	fmt.Printf("  ret\n")
 }
 
@@ -46,6 +52,18 @@ func (a X64) pop(arg string) {
 	depth--
 }
 
+// Compute the absolute address of a given node.
+// It's an error if a given node does not reside in memory.
+func (a X64) genAddr(node *Node) {
+	if node.kind == ND_VAR {
+		offset := (node.name - 'a' + 1) * 8
+		fmt.Printf("  lea %d(%%rbp), %%rax\n", -offset)
+		return
+	}
+
+	fail("not an lvalue")
+}
+
 // Generate code for a given node.
 func (a X64) genExpr(node *Node) {
 	switch node.kind {
@@ -55,6 +73,17 @@ func (a X64) genExpr(node *Node) {
 	case ND_NEG:
 		a.genExpr(node.lhs)
 		fmt.Printf("  neg %%rax\n")
+		return
+	case ND_VAR:
+		a.genAddr(node)
+		fmt.Printf("  mov (%%rax), %%rax\n")
+		return
+	case ND_ASSIGN:
+		a.genAddr(node.lhs)
+		a.push()
+		a.genExpr(node.rhs)
+		a.pop("%rdi")
+		fmt.Printf("  mov %%rax, (%%rdi)\n")
 		return
 	}
 
@@ -103,9 +132,18 @@ type RiscV struct{}
 func (a RiscV) prologue() {
 	fmt.Printf("  .globl main\n")
 	fmt.Printf("main:\n")
+
+	fmt.Printf("  addi sp, sp, -8\n")
+	fmt.Printf("  sd fp, 0(sp)\n")
+	fmt.Printf("  mv fp, sp\n")
+
+	fmt.Printf("  addi sp, sp, -208\n")
 }
 
 func (a RiscV) epilogue() {
+	fmt.Printf("  mv sp, fp\n")
+	fmt.Printf("  ld fp, 0(sp)\n")
+	fmt.Printf("  addi sp, sp, 8\n")
 	fmt.Printf("  ret\n")
 }
 
@@ -121,6 +159,18 @@ func (a RiscV) pop(arg string) {
 	depth--
 }
 
+// Compute the absolute address of a given node.
+// It's an error if a given node does not reside in memory.
+func (a RiscV) genAddr(node *Node) {
+	if node.kind == ND_VAR {
+		offset := (node.name - 'a' + 1) * 8
+		fmt.Printf("  addi a0, fp, %d\n", -offset)
+		return
+	}
+
+	fail("not an lvalue")
+}
+
 // Generate code for a given node.
 func (a RiscV) genExpr(node *Node) {
 	switch node.kind {
@@ -130,6 +180,17 @@ func (a RiscV) genExpr(node *Node) {
 	case ND_NEG:
 		a.genExpr(node.lhs)
 		fmt.Printf("  neg a0, a0\n")
+		return
+	case ND_VAR:
+		a.genAddr(node)
+		fmt.Printf("  ld a0, 0(a0)\n")
+		return
+	case ND_ASSIGN:
+		a.genAddr(node.lhs)
+		a.push()
+		a.genExpr(node.rhs)
+		a.pop("a1")
+		fmt.Printf("  sd a0, 0(a1)\n")
 		return
 	}
 

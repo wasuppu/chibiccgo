@@ -15,7 +15,8 @@ var currentInputLoc int
 type TokenKind int
 
 const (
-	TK_PUNCT TokenKind = iota // PunctuatorsMore actions
+	TK_IDENT TokenKind = iota // Identifiers
+	TK_PUNCT                  // Punctuators
 	TK_NUM                    // Numeric literals
 	TK_EOF                    // End-of-file markers
 )
@@ -88,6 +89,14 @@ func tokenize(input string) *Token {
 			cur = cur.next
 			cur.val = n
 			p = np
+			continue
+		}
+
+		// Identifier
+		if 'a' <= input[p] && input[p] <= 'z' {
+			cur.next = NewToken(TK_IDENT, p, 1, string(input[p]))
+			cur = cur.next
+			p++
 			continue
 		}
 
