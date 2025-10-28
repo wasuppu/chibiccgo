@@ -20,20 +20,20 @@ func chooseArch(arch string) Arch {
 }
 
 type Arch interface {
-	prologue()
+	prologue(stackSize int)
 	epilogue()
 	genExpr(node *Node)
 }
 
 type X64 struct{}
 
-func (a X64) prologue() {
+func (a X64) prologue(stackSize int) {
 	fmt.Printf("  .globl main\n")
 	fmt.Printf("main:\n")
 
 	fmt.Printf("  push %%rbp\n")
 	fmt.Printf("  mov %%rsp, %%rbp\n")
-	fmt.Printf("  sub $208, %%rsp\n")
+	fmt.Printf("  sub $%d, %%rsp\n", stackSize)
 }
 
 func (a X64) epilogue() {
@@ -56,8 +56,7 @@ func (a X64) pop(arg string) {
 // It's an error if a given node does not reside in memory.
 func (a X64) genAddr(node *Node) {
 	if node.kind == ND_VAR {
-		offset := (node.name - 'a' + 1) * 8
-		fmt.Printf("  lea %d(%%rbp), %%rax\n", -offset)
+		fmt.Printf("  lea %d(%%rbp), %%rax\n", node.vara.offset)
 		return
 	}
 
@@ -129,7 +128,7 @@ func (a X64) genExpr(node *Node) {
 
 type RiscV struct{}
 
-func (a RiscV) prologue() {
+func (a RiscV) prologue(stackSize int) {
 	fmt.Printf("  .globl main\n")
 	fmt.Printf("main:\n")
 
@@ -137,7 +136,7 @@ func (a RiscV) prologue() {
 	fmt.Printf("  sd fp, 0(sp)\n")
 	fmt.Printf("  mv fp, sp\n")
 
-	fmt.Printf("  addi sp, sp, -208\n")
+	fmt.Printf("  addi sp, sp, -%d\n", stackSize)
 }
 
 func (a RiscV) epilogue() {
@@ -163,8 +162,7 @@ func (a RiscV) pop(arg string) {
 // It's an error if a given node does not reside in memory.
 func (a RiscV) genAddr(node *Node) {
 	if node.kind == ND_VAR {
-		offset := (node.name - 'a' + 1) * 8
-		fmt.Printf("  addi a0, fp, %d\n", -offset)
+		fmt.Printf("  addi a0, fp, %d\n", node.vara.offset)
 		return
 	}
 
@@ -243,14 +241,32 @@ func genStmt(target Arch, node *Node) {
 	fail("invalid statement")
 }
 
-func codegen(arch string, node *Node) {
-	target := chooseArch(arch)
-	target.prologue()
+func codegen(arch string, prog *Function) {
+	assignLVarOffsets(prog)
 
-	for n := node; n != nil; n = n.next {
+	target := chooseArch(arch)
+	target.prologue(prog.stackSize)
+
+	for n := prog.body; n != nil; n = n.next {
 		genStmt(target, n)
 		assert(depth == 0)
 	}
 
 	target.epilogue()
+}
+
+// Round up `n` to the nearest multiple of `align`. For instance,
+// align_to(5, 8) returns 8 and align_to(11, 8) returns 16.
+func alignTo(n, align int) int {
+	return (n + align - 1) / align * align
+}
+
+// Assign offsets to local variables.
+func assignLVarOffsets(prog *Function) {
+	offset := 0
+	for vara := prog.locals; vara != nil; vara = vara.next {
+		offset += 8
+		vara.offset = -offset
+	}
+	prog.stackSize = alignTo(offset, 16)
 }

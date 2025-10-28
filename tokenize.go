@@ -54,6 +54,16 @@ func (tok Token) skip(op string) *Token {
 	return tok.next
 }
 
+// Returns true if c is valid as the first character of an identifier.
+func isIdent1(c byte) bool {
+	return ('a' <= c && c <= 'z') || ('A' <= c && c <= 'Z') || c == '_'
+}
+
+// Returns true if c is valid as a non-first character of an identifier.
+func isIdent2(c byte) bool {
+	return isIdent1(c) || ('0' <= c && c <= '9')
+}
+
 // Read a punctuator token from p and returns its length.
 func readPunct(p int) int {
 	if strings.HasPrefix(source[p:], "==") || strings.HasPrefix(source[p:], "!=") ||
@@ -93,10 +103,16 @@ func tokenize(input string) *Token {
 		}
 
 		// Identifier
-		if 'a' <= input[p] && input[p] <= 'z' {
-			cur.next = NewToken(TK_IDENT, p, 1, string(input[p]))
+		if isIdent1(input[p]) {
+			start := p
+			for {
+				p++
+				if !isIdent2(input[p]) {
+					break
+				}
+			}
+			cur.next = NewToken(TK_IDENT, start, p-start, input[start:p])
 			cur = cur.next
-			p++
 			continue
 		}
 

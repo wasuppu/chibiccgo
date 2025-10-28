@@ -1,5 +1,23 @@
 package main
 
+// All local variable instances created during parsing are
+// accumulated to this list.
+var locals *Obj
+
+// Local variable
+type Obj struct {
+	next   *Obj
+	name   string // Variable name
+	offset int    // Offset from RBP
+}
+
+// Function
+type Function struct {
+	body      *Node
+	locals    *Obj
+	stackSize int
+}
+
 // AST node
 type NodeKind int
 
@@ -25,8 +43,18 @@ type Node struct {
 	next *Node    // Next node
 	lhs  *Node    // Left-hand side
 	rhs  *Node    // Right-hand side
-	name byte     // Used if kind == ND_VAR
+	vara *Obj     // Used if kind == ND_VAR
 	val  int      // Used if kind == ND_NUM
+}
+
+// Find a local variable by name.
+func findVar(tok *Token) *Obj {
+	for vara := locals; vara != nil; vara = vara.next {
+		if len(vara.name) == tok.len && tok.lexeme == vara.name {
+			return vara
+		}
+	}
+	return nil
 }
 
 // Create a new AST node.
@@ -57,10 +85,16 @@ func NewNum(val int) *Node {
 	}
 }
 
-func NewVarNode(name byte) *Node {
+func NewVarNode(vara *Obj) *Node {
 	node := NewNode(ND_VAR)
-	node.name = name
+	node.vara = vara
 	return node
+}
+
+func NewLVar(name string) *Obj {
+	vara := &Obj{name: name, next: locals}
+	locals = vara
+	return vara
 }
 
 // stmt = expr-stmt
@@ -203,9 +237,12 @@ func primary(rest **Token, tok *Token) *Node {
 	}
 
 	if tok.kind == TK_IDENT {
-		node := NewVarNode(source[tok.loc])
+		vara := findVar(tok)
+		if vara == nil {
+			vara = NewLVar(tok.lexeme)
+		}
 		*rest = tok.next
-		return node
+		return NewVarNode(vara)
 	}
 
 	if tok.kind == TK_NUM {
@@ -219,7 +256,7 @@ func primary(rest **Token, tok *Token) *Node {
 }
 
 // program = stmt*
-func parse(tok *Token) *Node {
+func parse(tok *Token) *Function {
 	head := Node{}
 	cur := &head
 
@@ -228,5 +265,6 @@ func parse(tok *Token) *Node {
 		cur = cur.next
 	}
 
-	return head.next
+	prog := &Function{body: head.next, locals: locals}
+	return prog
 }
