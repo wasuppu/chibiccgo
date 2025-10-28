@@ -112,5 +112,18 @@ func (node *Node) addType() {
 		}
 		node.ty = node.lhs.ty.base
 		return
+	case ND_STMT_EXPR:
+		if node.body != nil {
+			stmt := node.body
+			for stmt.next != nil {
+				stmt = stmt.next
+			}
+			if stmt.kind == ND_EXPR_STMT {
+				node.ty = stmt.lhs.ty
+				return
+			}
+		}
+		failTok(node.tok, "statement expression returning void is not supported")
+		return
 	}
 }
