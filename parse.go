@@ -179,6 +179,7 @@ const (
 	ND_MEMZERO                   // Zero-clear a stack variable
 	ND_ASM                       // "asm"
 	ND_CAS                       // Atomic compare-and-swap
+	ND_EXCH                      // Atomic exchange
 )
 
 // AST node type
@@ -3280,6 +3281,16 @@ func primary(rest **Token, tok *Token) *Node {
 		node.casOld = assign(&tok, tok)
 		tok = tok.skip(",")
 		node.casNew = assign(&tok, tok)
+		*rest = tok.skip(")")
+		return node
+	}
+
+	if tok.equal("__builtin_atomic_exchange") {
+		node := NewNode(ND_EXCH, tok)
+		tok = tok.next.skip("(")
+		node.lhs = assign(&tok, tok)
+		tok = tok.skip(",")
+		node.rhs = assign(&tok, tok)
 		*rest = tok.skip(")")
 		return node
 	}

@@ -1150,6 +1150,15 @@ func (a X64) genExpr(node *Node) {
 		println("1:")
 		println("  movzbl %%cl, %%eax")
 		return
+	case ND_EXCH:
+		a.genExpr(node.lhs)
+		a.push()
+		a.genExpr(node.rhs)
+		a.pop("%rdi")
+
+		sz := node.lhs.ty.base.size
+		println("  xchg %s, (%%rdi)", a.regAx(sz))
+		return
 	}
 
 	switch node.lhs.ty.kind {
