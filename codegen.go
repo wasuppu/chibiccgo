@@ -15,6 +15,60 @@ var argReg32x = []string{"%edi", "%esi", "%edx", "%ecx", "%r8d", "%r9d"}
 var argReg64x = []string{"%rdi", "%rsi", "%rdx", "%rcx", "%r8", "%r9"}
 var argRegR = []string{"a0", "a1", "a2", "a3", "a4", "a5"}
 
+const (
+	I8 = iota
+	I16
+	I32
+	I64
+)
+
+// The table for x64 type casts
+var i32i8 = "movsbl %al, %eax"
+var i32i16 = "movswl %ax, %eax"
+var i32i64 = "movsxd %eax, %rax"
+
+var x64CastTable = [][]string{
+	{"", "", "", i32i64},        // i8
+	{i32i8, "", "", i32i64},     // i16
+	{i32i8, i32i16, "", i32i64}, // i32
+	{i32i8, i32i16, "", ""},     // i64
+}
+
+// The table for riscv type casts
+var i64i8 = fmt.Sprint("slli a0, a0, 56\n", "  srai a0, a0, 56")
+var i64i16 = fmt.Sprint("slli a0, a0, 48\n", "  srai a0, a0, 48")
+var i64i32 = fmt.Sprint("slli a0, a0, 32\n", "  srai a0, a0, 32")
+var riscvCastTable = [][]string{
+	{"", "", "", ""},
+	{i64i8, "", "", ""},
+	{i64i8, i64i16, "", ""},
+	{i64i8, i64i16, i64i32, ""},
+}
+
+func getTypeId(ty *Type) int {
+	switch ty.kind {
+	case TY_CHAR:
+		return I8
+	case TY_SHORT:
+		return I16
+	case TY_INT:
+		return I32
+	}
+	return I64
+}
+
+func castType(from *Type, to *Type, castTable [][]string) {
+	if to.kind == TY_VOID {
+		return
+	}
+
+	t1 := getTypeId(from)
+	t2 := getTypeId(to)
+	if len(castTable[t1][t2]) > 0 {
+		println("  %s", castTable[t1][t2])
+	}
+}
+
 func chooseArch(arch string) Arch {
 	var target Arch
 	switch arch {
@@ -187,6 +241,10 @@ func (a X64) genExpr(node *Node) {
 	case ND_COMMA:
 		a.genExpr(node.lhs)
 		a.genExpr(node.rhs)
+		return
+	case ND_CAST:
+		a.genExpr(node.lhs)
+		castType(node.lhs.ty, node.ty, x64CastTable)
 		return
 	case ND_FUNCALL:
 		nargs := 0
@@ -506,6 +564,10 @@ func (a RiscV) genExpr(node *Node) {
 	case ND_COMMA:
 		a.genExpr(node.lhs)
 		a.genExpr(node.rhs)
+		return
+	case ND_CAST:
+		a.genExpr(node.lhs)
+		castType(node.lhs.ty, node.ty, riscvCastTable)
 		return
 	case ND_FUNCALL:
 		nargs := 0

@@ -69,6 +69,7 @@ const (
 	ND_STMT_EXPR                 // Statement expression
 	ND_VAR                       // Variable
 	ND_NUM                       // Integer
+	ND_CAST                      // Type cast
 )
 
 // AST node type
@@ -213,6 +214,17 @@ func NewVarNode(vara *Obj, tok *Token) *Node {
 	node := NewNode(ND_VAR, tok)
 	node.vara = vara
 	return node
+}
+
+func NewCast(expr *Node, ty *Type) *Node {
+	expr.addType()
+
+	return &Node{
+		kind: ND_CAST,
+		tok:  expr.tok,
+		lhs:  expr,
+		ty:   copyType(ty),
+	}
 }
 
 func NewVar(name string, ty *Type) *Obj {
@@ -777,20 +789,20 @@ func add(rest **Token, tok *Token) *Node {
 	}
 }
 
-// mul = unary ("*" unary | "/" unary)*
+// mul = cast ("*" cast | "/" cast)*
 func mul(rest **Token, tok *Token) *Node {
-	node := unary(&tok, tok)
+	node := cast(&tok, tok)
 
 	for {
 		start := tok
 
 		if tok.equal("*") {
-			node = NewBinary(ND_MUL, node, unary(&tok, tok.next), start)
+			node = NewBinary(ND_MUL, node, cast(&tok, tok.next), start)
 			continue
 		}
 
 		if tok.equal("/") {
-			node = NewBinary(ND_DIV, node, unary(&tok, tok.next), start)
+			node = NewBinary(ND_DIV, node, cast(&tok, tok.next), start)
 			continue
 		}
 
@@ -799,23 +811,37 @@ func mul(rest **Token, tok *Token) *Node {
 	}
 }
 
-// unary = ("+" | "-" | "*" | "&") unary
+// cast = "(" type-name ")" cast | unary
+func cast(rest **Token, tok *Token) *Node {
+	if tok.equal("(") && isTypename(tok.next) {
+		start := tok
+		ty := typename(&tok, tok.next)
+		tok = tok.skip(")")
+		node := NewCast(cast(rest, tok), ty)
+		node.tok = start
+		return node
+	}
+
+	return unary(rest, tok)
+}
+
+// unary = ("+" | "-" | "*" | "&") cast
 // | postfix
 func unary(rest **Token, tok *Token) *Node {
 	if tok.equal("+") {
-		return unary(rest, tok.next)
+		return cast(rest, tok.next)
 	}
 
 	if tok.equal("-") {
-		return NewUnary(ND_NEG, unary(rest, tok.next), tok)
+		return NewUnary(ND_NEG, cast(rest, tok.next), tok)
 	}
 
 	if tok.equal("&") {
-		return NewUnary(ND_ADDR, unary(rest, tok.next), tok)
+		return NewUnary(ND_ADDR, cast(rest, tok.next), tok)
 	}
 
 	if tok.equal("*") {
-		return NewUnary(ND_DEREF, unary(rest, tok.next), tok)
+		return NewUnary(ND_DEREF, cast(rest, tok.next), tok)
 	}
 
 	return postfix(rest, tok)
