@@ -561,6 +561,14 @@ func tokenize(file *File) *Token {
 			continue
 		}
 
+		// UTF-32 character literal
+		if strings.HasPrefix(input[p:], "U'") {
+			cur.next = readCharLiteral(p, p+1, tyUInt)
+			cur = cur.next
+			p += cur.len
+			continue
+		}
+
 		// Identifier or keyword
 		if isIdent1(input[p]) {
 			start := p

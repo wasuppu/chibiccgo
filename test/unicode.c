@@ -28,6 +28,16 @@ int main() {
 
   ASSERT(0, strcmp(STR(u'a'), "u'a'"));
 
+  // c227
+  ASSERT(4, sizeof(U'\0'));
+  ASSERT(1, U'\xffffffff'>>31);
+  ASSERT(97, U'a');
+  ASSERT(946, U'β');
+  ASSERT(12354, U'あ');
+  ASSERT(127843, U'🍣');
+
+  ASSERT(0, strcmp(STR(U'a'), "U'a'"));
+
   printf("OK\n");
   return 0;
 }
