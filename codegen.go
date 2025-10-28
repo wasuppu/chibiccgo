@@ -57,18 +57,6 @@ func getTypeId(ty *Type) int {
 	return I64
 }
 
-func castType(from *Type, to *Type, castTable [][]string) {
-	if to.kind == TY_VOID {
-		return
-	}
-
-	t1 := getTypeId(from)
-	t2 := getTypeId(to)
-	if len(castTable[t1][t2]) > 0 {
-		println("  %s", castTable[t1][t2])
-	}
-}
-
 func chooseArch(arch string) Arch {
 	var target Arch
 	switch arch {
@@ -123,9 +111,9 @@ func (a X64) load(ty *Type) {
 
 	switch ty.size {
 	case 1:
-		println("  movsbq (%%rax), %%rax")
+		println("  movsbl (%%rax), %%eax")
 	case 2:
-		println("  movswq (%%rax), %%rax")
+		println("  movswl (%%rax), %%eax")
 	case 4:
 		println("  movsxd (%%rax), %%rax")
 	default:
@@ -173,6 +161,33 @@ func (a X64) storeGP(r, offset, sz int) {
 		return
 	}
 	unreachable()
+}
+
+func (a X64) castType(from *Type, to *Type) {
+	if to.kind == TY_VOID {
+		return
+	}
+
+	if to.kind == TY_BOOL {
+		a.cmpZero(from)
+		println("  setne %%al")
+		println("  movzx %%al, %%eax")
+		return
+	}
+
+	t1 := getTypeId(from)
+	t2 := getTypeId(to)
+	if len(x64CastTable[t1][t2]) > 0 {
+		println("  %s", x64CastTable[t1][t2])
+	}
+}
+
+func (a X64) cmpZero(ty *Type) {
+	if ty.isInteger() && ty.size <= 4 {
+		println("  cmp $0, %%eax")
+	} else {
+		println("  cmp $0, %%rax")
+	}
 }
 
 // Compute the absolute address of a given node.
@@ -244,7 +259,7 @@ func (a X64) genExpr(node *Node) {
 		return
 	case ND_CAST:
 		a.genExpr(node.lhs)
-		castType(node.lhs.ty, node.ty, x64CastTable)
+		a.castType(node.lhs.ty, node.ty)
 		return
 	case ND_FUNCALL:
 		nargs := 0
@@ -495,6 +510,23 @@ func (a RiscV) storeGP(r, offset, sz int) {
 	unreachable()
 }
 
+func (a RiscV) castType(from *Type, to *Type) {
+	if to.kind == TY_VOID {
+		return
+	}
+
+	if to.kind == TY_BOOL {
+		println("  snez a0, a0")
+		return
+	}
+
+	t1 := getTypeId(from)
+	t2 := getTypeId(to)
+	if len(riscvCastTable[t1][t2]) > 0 {
+		println("  %s", riscvCastTable[t1][t2])
+	}
+}
+
 // Compute the absolute address of a given node.
 // It's an error if a given node does not reside in memory.
 func (a RiscV) genAddr(node *Node) {
@@ -567,7 +599,7 @@ func (a RiscV) genExpr(node *Node) {
 		return
 	case ND_CAST:
 		a.genExpr(node.lhs)
-		castType(node.lhs.ty, node.ty, riscvCastTable)
+		a.castType(node.lhs.ty, node.ty)
 		return
 	case ND_FUNCALL:
 		nargs := 0

@@ -306,14 +306,15 @@ func getNumber(tok *Token) int64 {
 
 const (
 	VOID  = 1 << 0
-	CHAR  = 1 << 2
-	SHORT = 1 << 4
-	INT   = 1 << 6
-	LONG  = 1 << 8
-	OTHER = 1 << 10
+	BOOL  = 1 << 2
+	CHAR  = 1 << 4
+	SHORT = 1 << 6
+	INT   = 1 << 8
+	LONG  = 1 << 10
+	OTHER = 1 << 12
 )
 
-// declspec = ("void" | "char" | "short" | "int" | "long"
+// declspec = ("void" | "_Bool" | "char" | "short" | "int" | "long"
 // | "typedef"
 // | struct-decl | union-decl | typedef-name)+
 func declspec(rest **Token, tok *Token, attr *VarAttr) *Type {
@@ -354,6 +355,8 @@ func declspec(rest **Token, tok *Token, attr *VarAttr) *Type {
 		// Handle built-in types.
 		if tok.equal("void") {
 			counter += VOID
+		} else if tok.equal("_Bool") {
+			counter += BOOL
 		} else if tok.equal("char") {
 			counter += CHAR
 		} else if tok.equal("short") {
@@ -369,6 +372,8 @@ func declspec(rest **Token, tok *Token, attr *VarAttr) *Type {
 		switch counter {
 		case VOID:
 			ty = tyVoid
+		case BOOL:
+			ty = tyBool
 		case CHAR:
 			ty = tyChar
 		case SHORT, SHORT + INT:
@@ -517,7 +522,7 @@ func declaration(rest **Token, tok *Token, basety *Type) *Node {
 }
 
 var typenames = []string{
-	"void", "char", "short", "int", "long", "struct", "union",
+	"void", "_Bool", "char", "short", "int", "long", "struct", "union",
 	"typedef",
 }
 

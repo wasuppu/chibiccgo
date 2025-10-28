@@ -1,6 +1,7 @@
 package main
 
 var tyVoid = &Type{kind: TY_VOID, size: 1, align: 1}
+var tyBool = &Type{kind: TY_BOOL, size: 1, align: 1}
 
 var tyChar = &Type{kind: TY_CHAR, size: 1, align: 1}
 var tyShort = &Type{kind: TY_SHORT, size: 2, align: 2}
@@ -11,6 +12,7 @@ type TypeKind int
 
 const (
 	TY_VOID TypeKind = iota
+	TY_BOOL
 	TY_CHAR
 	TY_SHORT
 	TY_INT
@@ -55,8 +57,8 @@ func newType(kind TypeKind, size int, align int) *Type {
 
 func (ty Type) isInteger() bool {
 	k := ty.kind
-	return k == TY_CHAR || k == TY_SHORT || k == TY_INT ||
-		k == TY_LONG
+	return k == TY_BOOL || k == TY_CHAR || k == TY_SHORT ||
+		k == TY_INT || k == TY_LONG
 }
 
 func copyType(ty *Type) *Type {
