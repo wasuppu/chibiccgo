@@ -17,3 +17,5 @@ int strncmp(char *p, char *q, long n);
 int vsprintf(char *buf, char *fmt, void *ap);
 // c205
 int vsprintf();
+// c220
+long strlen(char *s);

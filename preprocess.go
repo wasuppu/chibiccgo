@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 var condIncl *CondIncl
@@ -938,6 +939,22 @@ func lineMacro(tmpl *Token) *Token {
 	return newNumToken(tmpl.lineno, tmpl)
 }
 
+// __DATE__ is expanded to the current date, e.g. "May 17 2020".
+func formatDate(t time.Time) string {
+	months := []string{
+		"Jan", "Feb", "Mar", "Apr", "May", "Jun",
+		"Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+	}
+	return fmt.Sprintf("\"%s %2d %d\"",
+		months[t.Month()-1], t.Day(), t.Year())
+}
+
+// __TIME__ is expanded to the current time, e.g. "13:34:03".
+func formatTime(t time.Time) string {
+	return fmt.Sprintf("\"%02d:%02d:%02d\"",
+		t.Hour(), t.Minute(), t.Second())
+}
+
 func (a X64) initMacro() {
 	// Define predefined macros
 	defineMacro("_LP64", "1")
@@ -984,6 +1001,10 @@ func (a X64) initMacro() {
 
 	addBuiltin("__FILE__", fileMacro)
 	addBuiltin("__LINE__", lineMacro)
+
+	now := time.Now()
+	defineMacro("__DATE__", formatDate(now))
+	defineMacro("__TIME__", formatTime(now))
 }
 
 func (a RiscV) initMacro() {
