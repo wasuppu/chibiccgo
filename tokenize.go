@@ -758,7 +758,7 @@ func readFile(path string) []byte {
 	if len(content) > 0 && content[len(content)-1] != '\n' {
 		content = append(content, '\n')
 	}
-	return content
+	return append(content, '\x00')
 }
 
 // Replaces \r or \r\n with \n.
@@ -895,7 +895,7 @@ func tokenizeFile(path string) *Token {
 		p = p[3:]
 	}
 
-	p = canonicalizeNewline(append(p, '\x00'))
+	p = canonicalizeNewline(p)
 	p = removeBackSlashNewline(p)
 	p = convertUniversalChars(p)
 
