@@ -127,7 +127,6 @@ func (node *Node) addType() {
 			node.ty = tyLong
 		}
 		return
-		return
 	case ND_ADD, ND_SUB, ND_MUL, ND_DIV:
 		usualArithConv(&node.lhs, &node.rhs)
 		node.ty = node.lhs.ty

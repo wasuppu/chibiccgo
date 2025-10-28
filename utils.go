@@ -33,7 +33,7 @@ func fail(format string, args ...any) {
 	os.Exit(1)
 }
 
-// Reports an error message in the following format and exit.
+// Reports an error message in the following format.
 // foo.c:10: x = y + 1;
 // ^ <error message here>
 func vfailAt(lineno, loc int, format string, args ...any) {
@@ -58,7 +58,6 @@ func vfailAt(lineno, loc int, format string, args ...any) {
 	fmt.Fprintf(os.Stderr, "%*s", pos, "") // print pos spaces
 	fmt.Fprint(os.Stderr, "^ ")
 	fmt.Fprintf(os.Stderr, format+"\n", args...)
-	os.Exit(1)
 }
 
 func failAt(loc int, format string, args ...any) {
@@ -70,10 +69,12 @@ func failAt(loc int, format string, args ...any) {
 		}
 	}
 	vfailAt(lineno, loc, format, args...)
+	os.Exit(1)
 }
 
 func failTok(tok *Token, format string, args ...any) {
 	vfailAt(tok.lineno, tok.loc, format, args...)
+	os.Exit(1)
 }
 
 func assert(condition bool) {

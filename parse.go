@@ -1012,6 +1012,15 @@ func funcall(rest **Token, tok *Token) *Node {
 	start := tok
 	tok = tok.next.next
 
+	sc := findVar(start)
+	if sc == nil {
+		failTok(start, "implicit declaration of a function")
+	}
+	if sc.vara == nil || sc.vara.ty.kind != TY_FUNC {
+		failTok(start, "not a function")
+	}
+
+	ty := sc.vara.ty.returnTy
 	head := Node{}
 	cur := &head
 
@@ -1021,12 +1030,14 @@ func funcall(rest **Token, tok *Token) *Node {
 		}
 		cur.next = assign(&tok, tok)
 		cur = cur.next
+		cur.addType()
 	}
 
 	*rest = tok.skip(")")
 
 	node := NewNode(ND_FUNCALL, start)
 	node.funcname = start.lexeme
+	node.ty = ty
 	node.args = head.next
 	return node
 }
