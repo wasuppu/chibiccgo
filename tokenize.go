@@ -16,7 +16,7 @@ var currentFilename string
 
 var kws = []string{
 	"return", "if", "else", "for", "while", "int", "sizeof", "char",
-	"struct",
+	"struct", "union",
 }
 
 var puncts = []string{"==", "!=", "<=", ">=", "->"}
