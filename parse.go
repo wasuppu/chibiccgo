@@ -948,6 +948,51 @@ func stringInitializer(rest **Token, tok *Token, init *Initializer) {
 	*rest = tok.next
 }
 
+// array-designator = "[" const-expr "]"
+//
+// C99 added the designated initializer to the language, which allows
+// programmers to move the "cursor" of an initializer to any element.
+// The syntax looks like this:
+//
+//	int x[10] = { 1, 2, [5]=3, 4, 5, 6, 7 };
+//
+// `[5]` moves the cursor to the 5th element, so the 5th element of x
+// is set to 3. Initialization then continues forward in order, so
+// 6th, 7th, 8th and 9th elements are initialized with 4, 5, 6 and 7,
+// respectively. Unspecified elements (in this case, 3rd and 4th
+// elements) are initialized with zero.
+//
+// Nesting is allowed, so the following initializer is valid:
+//
+//	int x[5][10] = { [5][8]=1, 2, 3 };
+//
+// It sets x[5][8], x[5][9] and x[6][0] to 1, 2 and 3, respectively.
+func arrayDesignator(rest **Token, tok *Token, ty *Type) int {
+	start := tok
+	i := int(constExpr(&tok, tok.next))
+	if i >= ty.arrayLen {
+		failTok(start, "array designator index exceeds array bounds")
+	}
+	*rest = tok.skip("]")
+	return i
+}
+
+// designation = ("[" const-expr "]")* "=" initializer
+func designation(rest **Token, tok *Token, init *Initializer) {
+	if tok.equal("[") {
+		if init.ty.kind != TY_ARRAY {
+			failTok(tok, "array index in non-array initializer")
+		}
+		i := arrayDesignator(&tok, tok, init.ty)
+		designation(&tok, tok, init.children[i])
+		arrayInitializer2(rest, tok, init, i+1)
+		return
+	}
+
+	tok = tok.skip("=")
+	initializer2(rest, tok, init)
+}
+
 func countArrayInitElements(tok *Token, ty *Type) int {
 	dummy := NewInitializer(ty.base, false)
 	i := 0
@@ -964,6 +1009,7 @@ func countArrayInitElements(tok *Token, ty *Type) int {
 // array-initializer1 = "{" initializer ("," initializer)* ","? "}"
 func arrayInitializer1(rest **Token, tok *Token, init *Initializer) {
 	tok = tok.skip("{")
+	first := true
 
 	if init.isFlexible {
 		len := countArrayInitElements(tok, init.ty)
@@ -971,8 +1017,15 @@ func arrayInitializer1(rest **Token, tok *Token, init *Initializer) {
 	}
 
 	for i := 0; !consumeEnd(rest, tok); i++ {
-		if i > 0 {
+		if !first {
 			tok = tok.skip(",")
+		}
+		first = false
+
+		if tok.equal("[") {
+			i = arrayDesignator(&tok, tok, init.ty)
+			designation(&tok, tok, init.children[i])
+			continue
 		}
 
 		if i < init.ty.arrayLen {
@@ -984,16 +1037,23 @@ func arrayInitializer1(rest **Token, tok *Token, init *Initializer) {
 }
 
 // array-initializer2 = initializer ("," initializer)*
-func arrayInitializer2(rest **Token, tok *Token, init *Initializer) {
+func arrayInitializer2(rest **Token, tok *Token, init *Initializer, i int) {
 	if init.isFlexible {
 		len := countArrayInitElements(tok, init.ty)
 		*init = *NewInitializer(arrayOf(init.ty.base, len), false)
 	}
 
-	for i := 0; i < init.ty.arrayLen && !isEnd(tok); i++ {
+	for ; i < init.ty.arrayLen && !isEnd(tok); i++ {
+		start := tok
 		if i > 0 {
 			tok = tok.skip(",")
 		}
+
+		if tok.equal("[") {
+			*rest = start
+			return
+		}
+
 		initializer2(&tok, tok, init.children[i])
 	}
 	*rest = tok
@@ -1058,7 +1118,7 @@ func initializer2(rest **Token, tok *Token, init *Initializer) {
 		if tok.equal("{") {
 			arrayInitializer1(rest, tok, init)
 		} else {
-			arrayInitializer2(rest, tok, init)
+			arrayInitializer2(rest, tok, init, 0)
 		}
 		return
 	}
