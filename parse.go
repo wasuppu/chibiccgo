@@ -758,7 +758,7 @@ func compoundStmt(rest **Token, tok *Token) *Node {
 	enterScope()
 
 	for !tok.equal("}") {
-		if isTypename(tok) {
+		if isTypename(tok) && !tok.next.equal(":") {
 			attr := VarAttr{}
 			basety := declspec(&tok, tok, &attr)
 
