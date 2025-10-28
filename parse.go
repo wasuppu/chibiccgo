@@ -1912,6 +1912,13 @@ func cast(rest **Token, tok *Token) *Node {
 		start := tok
 		ty := typename(&tok, tok.next)
 		tok = tok.skip(")")
+
+		// compound literal
+		if tok.equal("{") {
+			return unary(rest, start)
+		}
+
+		// type cast
 		node := NewCast(cast(rest, tok), ty)
 		node.tok = start
 		return node
@@ -2127,8 +2134,27 @@ func newIncDec(node *Node, tok *Token, addend int) *Node {
 		node.ty)
 }
 
-// postfix = primary ("[" expr "]" | "." ident | "->" ident | "++" | "--")*
+// postfix = "(" type-name ")" "{" initializer-list "}"
+// | primary ("[" expr "]" | "." ident | "->" ident | "++" | "--")*
 func postfix(rest **Token, tok *Token) *Node {
+	if tok.equal("(") && isTypename(tok.next) {
+		// Compound literal
+		start := tok
+		ty := typename(&tok, tok.next)
+		tok = tok.skip(")")
+
+		if scope.next == nil {
+			vara := newAnonGVar(ty)
+			gvarInitializer(rest, tok, vara)
+			return NewVarNode(vara, start)
+		}
+
+		vara := NewLVar("", ty)
+		lhs := lvarInitializer(rest, tok, vara)
+		rhs := NewVarNode(vara, tok)
+		return NewBinary(ND_COMMA, lhs, rhs, start)
+	}
+
 	node := primary(&tok, tok)
 
 	for {
