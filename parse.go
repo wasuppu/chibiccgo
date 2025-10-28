@@ -2171,7 +2171,16 @@ func unary(rest **Token, tok *Token) *Node {
 	}
 
 	if tok.equal("*") {
-		return NewUnary(ND_DEREF, cast(rest, tok.next), tok)
+		// [https://www.sigbus.info/n1570#6.5.3.2p4] This is an oddity
+		// in the C spec, but dereferencing a function shouldn't do
+		// anything. If foo is a function, `*foo`, `**foo` or `*****foo`
+		// are all equivalent to just `foo`.
+		node := cast(rest, tok.next)
+		node.addType()
+		if node.ty.kind == TY_FUNC {
+			return node
+		}
+		return NewUnary(ND_DEREF, node, tok)
 	}
 
 	if tok.equal("!") {
