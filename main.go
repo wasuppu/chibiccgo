@@ -67,7 +67,7 @@ func usage(status int) {
 }
 
 func takeArg(arg string) bool {
-	x := []string{"-o", "-I", "-idirafter", "-include", "-x", "-MF", "-MT"}
+	x := []string{"-o", "-I", "-idirafter", "-include", "-x", "-MF", "-MT", "-Xlinker"}
 
 	for i := range x {
 		if arg == x[i] {
@@ -205,6 +205,12 @@ func parseArgs(args []string) {
 
 		if strings.HasPrefix(args[i], "-march=") {
 			optMarch = args[i][7:]
+			continue
+		}
+
+		if args[i] == "-Xlinker" {
+			i++
+			ldExtraArgs = append(ldExtraArgs, args[i])
 			continue
 		}
 
