@@ -325,6 +325,19 @@ func (a X64) storeGP(r, offset, sz int) {
 	unreachable()
 }
 
+func (a X64) storeFP(r, offset, sz int) {
+	switch sz {
+	case 4:
+		println("  movss %%xmm%d, %d(%%rbp)", r, offset)
+		return
+	case 8:
+		println("  movsd %%xmm%d, %d(%%rbp)", r, offset)
+		return
+	}
+
+	unreachable()
+}
+
 func (a X64) castType(from *Type, to *Type) {
 	if to.kind == TY_VOID {
 		return
@@ -868,10 +881,15 @@ func (a X64) emitText(prog *Obj) {
 		}
 
 		// Save passed-by-register arguments to the stack
-		i := 0
+		gp, fp := 0, 0
 		for vara := fn.params; vara != nil; vara = vara.next {
-			a.storeGP(i, vara.offset, vara.ty.size)
-			i++
+			if vara.ty.isFlonum() {
+				a.storeFP(fp, vara.offset, vara.ty.size)
+				fp++
+			} else {
+				a.storeGP(gp, vara.offset, vara.ty.size)
+				gp++
+			}
 		}
 
 		// Emit code
@@ -1057,6 +1075,21 @@ func (a RiscV) storeGP(r, offset, sz int) {
 		return
 	case 8:
 		println("  sd %s, 0(t0)", argRegR[r])
+		return
+	}
+	unreachable()
+}
+
+func (a RiscV) storeFP(r, offset, sz int) {
+	println("  li t0, %d", offset)
+	println("  add t0, fp, t0")
+
+	switch sz {
+	case 4:
+		println("  fsw fa%d, 0(t0)", r)
+		return
+	case 8:
+		println("  fsd fa%d, 0(t0)", r)
 		return
 	}
 	unreachable()
@@ -1572,17 +1605,27 @@ func (a RiscV) emitText(prog *Obj) {
 		currentGenFn = fn
 
 		// Save passed-by-register arguments to the stack
-		i := 0
+		gp, fp := 0, 0
 		for vara := fn.params; vara != nil; vara = vara.next {
-			a.storeGP(i, vara.offset, vara.ty.size)
-			i++
+			if vara.ty.isFlonum() {
+				if fp < 8 {
+					a.storeFP(fp, vara.offset, vara.ty.size)
+					fp++
+				} else {
+					a.storeGP(gp, vara.offset, vara.ty.size)
+					gp++
+				}
+			} else {
+				a.storeGP(gp, vara.offset, vara.ty.size)
+				gp++
+			}
 		}
 
 		if fn.vaArea != nil {
 			offset := fn.vaArea.offset
-			for i < 8 {
-				a.storeGP(i, offset, 8)
-				i++
+			for gp < 8 {
+				a.storeGP(gp, offset, 8)
+				gp++
 				offset += 8
 			}
 		}
