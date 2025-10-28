@@ -66,6 +66,16 @@ func (a RiscV) addDefaultIncludePaths(argv0 string) {
 	includePaths = append(includePaths, filepath.Join(rvpath, "sysroot/usr/include"))
 }
 
+func define(str string) {
+	eq := strings.Index(str, "=")
+
+	if eq != -1 {
+		defineMacro(str[:eq], str[eq+1:])
+	} else {
+		defineMacro(str, "1")
+	}
+}
+
 func parseArgs(args []string) {
 	// Make sure that all command line options that take an argument
 	// have an argument.
@@ -126,6 +136,17 @@ func parseArgs(args []string) {
 
 		if strings.HasPrefix(args[i], "-I") {
 			includePaths = append(includePaths, args[i][2:])
+			continue
+		}
+
+		if args[i] == "-D" {
+			i++
+			define(args[i])
+			continue
+		}
+
+		if strings.HasPrefix(args[i], "-D") {
+			define(args[i][2:])
 			continue
 		}
 
@@ -255,7 +276,7 @@ func printTokens(tok *Token) {
 		if tok.hasSpace && !tok.atBol {
 			fmt.Fprintf(out, " ")
 		}
-		fmt.Fprintf(out, "%.*s", tok.len, currentFile.contents[tok.loc:])
+		fmt.Fprintf(out, "%s", tok.lexeme)
 		line++
 	}
 	fmt.Fprintf(out, "\n")
@@ -267,7 +288,7 @@ func cc1(target Arch) {
 	if tok == nil {
 		fail("fail to tokenize %s", basefile)
 	}
-	tok = preprocess(target, tok)
+	tok = preprocess(tok)
 
 	// If -E is given, print out preprocessed C code as a result.
 	if optE {
@@ -467,6 +488,7 @@ func main() {
 
 	parseArgs(os.Args)
 	target := chooseArch(optMarch)
+	target.initMacro()
 
 	if optCC1 {
 		target.addDefaultIncludePaths(os.Args[0])

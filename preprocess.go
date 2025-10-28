@@ -1072,8 +1072,7 @@ func joinAdjacentStringLiterals(tok1 *Token) {
 }
 
 // Entry point function of the preprocessor.
-func preprocess(target Arch, tok *Token) *Token {
-	target.initMacro()
+func preprocess(tok *Token) *Token {
 	tok = preprocess2(tok)
 	if condIncl != nil {
 		failTok(condIncl.tok, "unterminated conditional directive")
