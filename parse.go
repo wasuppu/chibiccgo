@@ -1119,7 +1119,15 @@ func structRef(lhs *Node, tok *Token) *Node {
 	return node
 }
 
-// postfix = primary ("[" expr "]" | "." ident | "->" ident)*
+// Convert A++ to `(typeof A)((A += 1) - 1)`
+func newIncDec(node *Node, tok *Token, addend int) *Node {
+	node.addType()
+	return NewCast(newAdd(toAssign(newAdd(node, NewNum(int64(addend), tok), tok)),
+		NewNum(int64(-addend), tok), tok),
+		node.ty)
+}
+
+// postfix = primary ("[" expr "]" | "." ident | "->" ident | "++" | "--")*
 func postfix(rest **Token, tok *Token) *Node {
 	node := primary(&tok, tok)
 
@@ -1144,6 +1152,18 @@ func postfix(rest **Token, tok *Token) *Node {
 			node = NewUnary(ND_DEREF, node, tok)
 			node = structRef(node, tok.next)
 			tok = tok.next.next
+			continue
+		}
+
+		if tok.equal("++") {
+			node = newIncDec(node, tok, 1)
+			tok = tok.next
+			continue
+		}
+
+		if tok.equal("--") {
+			node = newIncDec(node, tok, -1)
+			tok = tok.next
 			continue
 		}
 
