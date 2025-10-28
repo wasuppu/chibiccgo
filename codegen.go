@@ -1360,7 +1360,7 @@ func (a X64) emitData(prog *Obj) {
 		}
 		println("  .align %d", align)
 
-		if vara.isTentative {
+		if optFcommon && vara.isTentative {
 			println("  .comm %s, %d, %d", vara.name, vara.ty.size, align)
 			continue
 		}

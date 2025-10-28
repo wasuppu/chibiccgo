@@ -10,6 +10,7 @@ import (
 	"strings"
 )
 
+var optFcommon bool = true
 var optE bool
 var optS bool
 var optC bool
@@ -125,6 +126,16 @@ func parseArgs(args []string) {
 
 		if args[i] == "-S" {
 			optS = true
+			continue
+		}
+
+		if args[i] == "-fcommon" {
+			optFcommon = true
+			continue
+		}
+
+		if args[i] == "-fno-common" {
+			optFcommon = false
 			continue
 		}
 
