@@ -211,6 +211,30 @@ func readStringLiteral(start int) *Token {
 	return tok
 }
 
+func readCharLiteral(start int) *Token {
+	p := start + 1
+	if p == len(source) {
+		failAt(start, "unclosed char literal")
+	}
+
+	var c byte
+	if source[p] == '\\' {
+		c = readEscapedChar(&p, p+1)
+	} else {
+		c = source[p]
+		p++
+	}
+
+	end := strings.Index(source[p:], "'")
+	if end == -1 {
+		failAt(p, "unclosed char literal")
+	}
+
+	tok := NewToken(TK_NUM, start, p+end-start+1, source[start:p+end+1])
+	tok.val = int64(int8(c))
+	return tok
+}
+
 func convertKeywords(tok *Token) {
 	for t := tok; t.kind != TK_EOF; t = t.next {
 		if isKeyword(t) {
@@ -287,6 +311,14 @@ func tokenize(filename string, input string) *Token {
 		// String literal
 		if input[p] == '"' {
 			cur.next = readStringLiteral(p)
+			cur = cur.next
+			p += cur.len
+			continue
+		}
+
+		// Character literal
+		if input[p] == '\'' {
+			cur.next = readCharLiteral(p)
 			cur = cur.next
 			p += cur.len
 			continue
