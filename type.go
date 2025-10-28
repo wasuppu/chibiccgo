@@ -288,7 +288,7 @@ func (node *Node) addType() {
 	case ND_BITNOT, ND_SHL, ND_SHR:
 		node.ty = node.lhs.ty
 		return
-	case ND_VAR:
+	case ND_VAR, ND_VLA_PTR:
 		node.ty = node.vara.ty
 		return
 	case ND_COND:

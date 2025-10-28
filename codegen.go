@@ -261,7 +261,7 @@ func (a X64) popf(reg int) {
 // Load a value from where %rax is pointing to.
 func (a X64) load(ty *Type) {
 	switch ty.kind {
-	case TY_ARRAY, TY_STRUCT, TY_UNION, TY_FUNC:
+	case TY_ARRAY, TY_STRUCT, TY_UNION, TY_FUNC, TY_VLA:
 		return
 	case TY_FLOAT:
 		println("  movss (%%rax), %%xmm0")
@@ -661,6 +661,12 @@ func (a X64) copyStructMem() {
 func (a X64) genAddr(node *Node) {
 	switch node.kind {
 	case ND_VAR:
+		// Variable-length array, which is always local.
+		if node.vara.ty.kind == TY_VLA {
+			println("  mov %d(%%rbp), %%rax", node.vara.offset)
+			return
+		}
+
 		// Local variable
 		if node.vara.isLocal {
 			println("  lea %d(%%rbp), %%rax", node.vara.offset)
@@ -703,6 +709,9 @@ func (a X64) genAddr(node *Node) {
 			a.genExpr(node)
 			return
 		}
+	case ND_VLA_PTR:
+		println("  lea %d(%%rbp), %%rax", node.vara.offset)
+		return
 	}
 
 	failTok(node.tok, "not an lvalue")

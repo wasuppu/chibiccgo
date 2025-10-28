@@ -21,3 +21,5 @@ int vsprintf();
 long strlen(char *s);
 // c271
 void *memcpy(void *dest, void *src, long n);
+// c273
+void *memset(void *s, int c, long n);

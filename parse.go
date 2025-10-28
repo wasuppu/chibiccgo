@@ -171,6 +171,7 @@ const (
 	ND_EXPR_STMT                 // Expression statement
 	ND_STMT_EXPR                 // Statement expression
 	ND_VAR                       // Variable
+	ND_VLA_PTR                   // VLA designator
 	ND_NUM                       // Integer
 	ND_CAST                      // Type cast
 	ND_MEMZERO                   // Zero-clear a stack variable
@@ -365,6 +366,12 @@ func NewULong(val int64, tok *Token) *Node {
 
 func NewVarNode(vara *Obj, tok *Token) *Node {
 	node := NewNode(ND_VAR, tok)
+	node.vara = vara
+	return node
+}
+
+func NewVlaPtr(vara *Obj, tok *Token) *Node {
+	node := NewNode(ND_VLA_PTR, tok)
 	node.vara = vara
 	return node
 }
@@ -994,7 +1001,7 @@ func declaration(rest **Token, tok *Token, basety *Type, attr *VarAttr) *Node {
 			// x = alloca(tmp)`.
 			vara := NewLVar(getIdent(ty.name), ty)
 			tok := ty.name
-			expr := NewBinary(ND_ASSIGN, NewVarNode(vara, tok),
+			expr := NewBinary(ND_ASSIGN, NewVlaPtr(vara, tok),
 				newAlloca(NewVarNode(ty.vlaSize, tok)),
 				tok)
 			cur.next = NewUnary(ND_EXPR_STMT, expr, tok)
@@ -2513,6 +2520,12 @@ func newAdd(lhs, rhs *Node, tok *Token) *Node {
 		lhs, rhs = rhs, lhs
 	}
 
+	// VLA + num
+	if lhs.ty.base.kind == TY_VLA {
+		rhs = NewBinary(ND_MUL, rhs, NewVarNode(lhs.ty.base.vlaSize, tok), tok)
+		return NewBinary(ND_ADD, lhs, rhs, tok)
+	}
+
 	// ptr + num
 	rhs = NewBinary(ND_MUL, rhs, NewLong(int64(lhs.ty.base.size), tok), tok)
 	return NewBinary(ND_ADD, lhs, rhs, tok)
@@ -2526,6 +2539,15 @@ func newSub(lhs, rhs *Node, tok *Token) *Node {
 	// num - num
 	if lhs.ty.isNumeric() && rhs.ty.isNumeric() {
 		return NewBinary(ND_SUB, lhs, rhs, tok)
+	}
+
+	// VLA + num
+	if lhs.ty.base.kind == TY_VLA {
+		rhs = NewBinary(ND_MUL, rhs, NewVarNode(lhs.ty.base.vlaSize, tok), tok)
+		rhs.addType()
+		node := NewBinary(ND_SUB, lhs, rhs, tok)
+		node.ty = lhs.ty
+		return node
 	}
 
 	// ptr - num
