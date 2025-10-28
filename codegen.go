@@ -61,7 +61,7 @@ func (a X64) pop(arg string) {
 
 // Load a value from where %rax is pointing to.
 func (a X64) load(ty *Type) {
-	if ty.kind == TY_ARRAY {
+	if ty.kind == TY_ARRAY || ty.kind == TY_STRUCT || ty.kind == TY_UNION {
 		return
 	}
 
@@ -75,6 +75,14 @@ func (a X64) load(ty *Type) {
 // Store %rax to an address that the stack top is pointing to.
 func (a X64) store(ty *Type) {
 	a.pop("%rdi")
+
+	if ty.kind == TY_STRUCT || ty.kind == TY_UNION {
+		for i := range ty.size {
+			println("  mov %d(%%rax), %%r8b", i)
+			println("  mov %%r8b, %d(%%rdi)", i)
+		}
+		return
+	}
 
 	if ty.size == 1 {
 		println("  mov %%al, (%%rdi)")
@@ -327,7 +335,7 @@ func (a RiscV) pop(arg string) {
 
 // Load a value from where %rax is pointing to.
 func (a RiscV) load(ty *Type) {
-	if ty.kind == TY_ARRAY {
+	if ty.kind == TY_ARRAY || ty.kind == TY_STRUCT || ty.kind == TY_UNION {
 		return
 	}
 
@@ -341,6 +349,19 @@ func (a RiscV) load(ty *Type) {
 // Store %rax to an address that the stack top is pointing to.
 func (a RiscV) store(ty *Type) {
 	a.pop("a1")
+
+	if ty.kind == TY_STRUCT || ty.kind == TY_UNION {
+		for i := range ty.size {
+			println("  li t0, %d", i)
+			println("  add t0, a0, t0")
+			println("  lb t1, 0(t0)")
+
+			println("  li t0, %d", i)
+			println("  add t0, a1, t0")
+			println("  sb t1, 0(t0)")
+		}
+		return
+	}
 
 	if ty.size == 1 {
 		println("  sb a0, 0(a1)")
