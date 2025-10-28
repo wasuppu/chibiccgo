@@ -700,23 +700,41 @@ func skipExcessElement(tok *Token) *Token {
 	return tok
 }
 
-// initializer = "{" initializer ("," initializer)* "}"
-// | assign
-func initializer2(rest **Token, tok *Token, init *Initializer) {
-	if init.ty.kind == TY_ARRAY {
-		tok = tok.skip("{")
+// string-initializer = string-literal
+func stringInitializer(rest **Token, tok *Token, init *Initializer) {
+	len := min(init.ty.arrayLen, tok.ty.arrayLen)
+	for i := range len {
+		init.children[i].expr = NewNum(int64(tok.str[i]), tok)
+	}
+	*rest = tok.next
+}
 
-		for i := 0; !consume(rest, tok, "}"); i++ {
-			if i > 0 {
-				tok = tok.skip(",")
-			}
+// array-initializer = "{" initializer ("," initializer)* "}"
+func arrayInitializer(rest **Token, tok *Token, init *Initializer) {
+	tok = tok.skip("{")
 
-			if i < init.ty.arrayLen {
-				initializer2(&tok, tok, init.children[i])
-			} else {
-				tok = skipExcessElement(tok)
-			}
+	for i := 0; !consume(rest, tok, "}"); i++ {
+		if i > 0 {
+			tok = tok.skip(",")
 		}
+
+		if i < init.ty.arrayLen {
+			initializer2(&tok, tok, init.children[i])
+		} else {
+			tok = skipExcessElement(tok)
+		}
+	}
+}
+
+// initializer = string-initializer | array-initializer | assign
+func initializer2(rest **Token, tok *Token, init *Initializer) {
+	if init.ty.kind == TY_ARRAY && tok.kind == TK_STR {
+		stringInitializer(rest, tok, init)
+		return
+	}
+
+	if init.ty.kind == TY_ARRAY {
+		arrayInitializer(rest, tok, init)
 		return
 	}
 
