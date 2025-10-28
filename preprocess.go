@@ -28,13 +28,14 @@ type Hideset struct {
 type MacroHandlerFn func(*Token) *Token
 
 type Macro struct {
-	next      *Macro
-	name      string
-	isObjlike bool // Object-like or function-like
-	params    *MacroParam
-	body      *Token
-	deleted   bool
-	handler   MacroHandlerFn
+	next       *Macro
+	name       string
+	isObjlike  bool // Object-like or function-like
+	params     *MacroParam
+	isVariadic bool
+	body       *Token
+	deleted    bool
+	handler    MacroHandlerFn
 }
 
 type Ctx int
@@ -340,13 +341,19 @@ func findMacro(tok *Token) *Macro {
 	return nil
 }
 
-func readMacroParams(rest **Token, tok *Token) *MacroParam {
+func readMacroParams(rest **Token, tok *Token, isVariadic *bool) *MacroParam {
 	head := MacroParam{}
 	cur := &head
 
 	for !tok.equal(")") {
 		if cur != &head {
 			tok = tok.skip(",")
+		}
+
+		if tok.equal("...") {
+			*isVariadic = true
+			*rest = tok.next.skip(")")
+			return head.next
 		}
 
 		if tok.kind != TK_IDENT {
@@ -382,21 +389,31 @@ func readMacroDefinition(rest **Token, tok *Token) {
 
 	if !tok.hasSpace && tok.equal("(") {
 		// Function-like macro
-		params := readMacroParams(&tok, tok.next)
+		isVariadic := false
+		params := readMacroParams(&tok, tok.next, &isVariadic)
+
 		m := addMacro(name, false, copyLine(rest, tok))
 		m.params = params
+		m.isVariadic = isVariadic
 	} else {
 		// Object-like macro
 		addMacro(name, true, copyLine(rest, tok))
 	}
 }
 
-func readMacroArgOne(rest **Token, tok *Token) *MacroArg {
+func readMacroArgOne(rest **Token, tok *Token, readRest bool) *MacroArg {
 	head := Token{}
 	cur := &head
 	level := 0
 
-	for level > 0 || (!tok.equal(",") && !tok.equal(")")) {
+	for {
+		if level == 0 && tok.equal(")") {
+			break
+		}
+		if level == 0 && !readRest && tok.equal(",") {
+			break
+		}
+
 		if tok.kind == TK_EOF {
 			failTok(tok, "premature end of input")
 		}
@@ -419,7 +436,7 @@ func readMacroArgOne(rest **Token, tok *Token) *MacroArg {
 	return arg
 }
 
-func readMacroArgs(rest **Token, tok *Token, params *MacroParam) *MacroArg {
+func readMacroArgs(rest **Token, tok *Token, params *MacroParam, isVariadic bool) *MacroArg {
 	start := tok
 	tok = tok.next.next
 
@@ -431,14 +448,28 @@ func readMacroArgs(rest **Token, tok *Token, params *MacroParam) *MacroArg {
 		if cur != &head {
 			tok = tok.skip(",")
 		}
-		cur.next = readMacroArgOne(&tok, tok)
+		cur.next = readMacroArgOne(&tok, tok, false)
 		cur = cur.next
 		cur.name = pp.name
 	}
 
-	if pp != nil {
+	if isVariadic {
+		arg := &MacroArg{}
+		if tok.equal(")") {
+			arg.tok = newEof(tok)
+		} else {
+			if pp != params {
+				tok = tok.skip(",")
+			}
+			arg = readMacroArgOne(&tok, tok, true)
+		}
+		arg.name = "__VA_ARGS__"
+		cur.next = arg
+		cur = cur.next
+	} else if pp != nil {
 		failTok(start, "too many arguments")
 	}
+
 	tok.skip(")")
 	*rest = tok
 	return head.next
@@ -641,7 +672,7 @@ func expandMacro(rest **Token, tok *Token) bool {
 
 	// Function-like macro application
 	macroToken := tok
-	args := readMacroArgs(&tok, tok, m.params)
+	args := readMacroArgs(&tok, tok, m.params, m.isVariadic)
 	rparen := tok
 
 	hs := hidesetIntersection(macroToken.hideset, rparen.hideset)
