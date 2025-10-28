@@ -3,9 +3,12 @@ package main
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"strings"
 )
 
+var optCC1 bool
+var optHashHashHash bool
 var optO string
 var optMarch string
 
@@ -18,6 +21,16 @@ func usage(status int) {
 
 func parseArgs(args []string) {
 	for i := 1; i < len(args); i++ {
+		if args[i] == "-###" {
+			optHashHashHash = true
+			continue
+		}
+
+		if args[i] == "-cc1" {
+			optCC1 = true
+			continue
+		}
+
 		if args[i] == "--help" {
 			usage(0)
 		}
@@ -69,9 +82,36 @@ func openFile(path string) *os.File {
 	return out
 }
 
-func main() {
-	parseArgs(os.Args)
+func runSubprocess(args []string) {
+	// If -### is given, dump the subprocess's command line.
+	if optHashHashHash {
+		fmt.Fprint(os.Stderr, args[0])
+		for i := 1; i < len(args); i++ {
+			fmt.Fprintf(os.Stderr, " %s", args[i])
+		}
+		fmt.Fprint(os.Stderr, "\n")
+	}
 
+	cmd := exec.Command(args[0], args[1:]...)
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	// Child process. Run a new command.
+	if err := cmd.Run(); err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			os.Exit(exitErr.ExitCode())
+		}
+		fmt.Fprintf(os.Stderr, "exec failed: %s: %v", args[0], err)
+		os.Exit(1)
+	}
+}
+
+func runCC1(args []string) {
+	runSubprocess(append(args, "-cc1"))
+}
+
+func cc1() {
 	target := chooseArch(optMarch)
 
 	// Tokenize and parse.
@@ -82,4 +122,15 @@ func main() {
 	out := openFile(optO)
 	fmt.Fprintf(out, ".file 1 \"%s\"\n", inputPath)
 	codegen(target, prog, out)
+}
+
+func main() {
+	parseArgs(os.Args)
+
+	if optCC1 {
+		cc1()
+		return
+	}
+
+	runCC1(os.Args)
 }

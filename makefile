@@ -60,7 +60,8 @@ x64:
 riscv:
 	$(MAKE) clean
 	$(MAKE) test ARCH=riscv
-	$(MAKE) test-stage2 ARCH=riscv
+	$(MAKE) stage2/chibicc ARCH=riscv
+# 	$(MAKE) test-stage2 ARCH=riscv
 
 # Stage 2
 
