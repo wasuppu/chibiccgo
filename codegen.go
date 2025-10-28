@@ -416,6 +416,7 @@ func (a X64) genStmt(node *Node) {
 			println("  je %s", node.brkLabel)
 		}
 		a.genStmt(node.then)
+		println("%s:", node.contLabel)
 		if node.inc != nil {
 			a.genExpr(node.inc)
 		}
@@ -800,6 +801,7 @@ func (a RiscV) genStmt(node *Node) {
 			println("  beqz a0, %s", node.brkLabel)
 		}
 		a.genStmt(node.then)
+		println("%s:", node.contLabel)
 		if node.inc != nil {
 			a.genExpr(node.inc)
 		}
