@@ -302,6 +302,14 @@ int main() {
 #endif
   ASSERT(4, m);
 
+  // c181
+#if no_such_symbol == 0
+  m = 5;
+#else
+  m = 6;
+#endif
+  ASSERT(5, m);
+
   printf("OK\n");
   return 0;
 }
