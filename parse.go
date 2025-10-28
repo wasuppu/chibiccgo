@@ -60,6 +60,7 @@ type Member struct {
 	ty     *Type
 	name   *Token
 	idx    int
+	align  int
 	offset int
 }
 
@@ -69,6 +70,7 @@ type Obj struct {
 	name    string // Variable name
 	ty      *Type  // Type
 	isLocal bool   // local or global/function
+	align   int    // alignment
 
 	// Local variable
 	offset int
@@ -217,6 +219,7 @@ type VarAttr struct {
 	isTypedef bool
 	isStatic  bool
 	isExtern  bool
+	align     int
 }
 
 // Represents a block scope.
@@ -371,8 +374,9 @@ func NewInitializer(ty *Type, isFlexible bool) *Initializer {
 
 func NewVar(name string, ty *Type) *Obj {
 	vara := &Obj{
-		name: name,
-		ty:   ty,
+		name:  name,
+		ty:    ty,
+		align: ty.align,
 	}
 	pushScope(name).vara = vara
 	return vara
@@ -466,6 +470,21 @@ func declspec(rest **Token, tok *Token, attr *VarAttr) *Type {
 				failTok(tok, "typedef and static may not be used together with static or extern")
 			}
 			tok = tok.next
+			continue
+		}
+
+		if tok.equal("_Alignas") {
+			if attr == nil {
+				failTok(tok, "_Alignas is not allowed in this context")
+			}
+			tok = tok.next.skip("(")
+
+			if isTypename(tok) {
+				attr.align = typename(&tok, tok).align
+			} else {
+				attr.align = int(constExpr(&tok, tok))
+			}
+			tok = tok.skip(")")
 			continue
 		}
 
@@ -723,7 +742,7 @@ func enumSpecifier(rest **Token, tok *Token) *Type {
 }
 
 // declaration = declspec (declarator ("=" expr)? ("," declarator ("=" expr)?)*)? ";"
-func declaration(rest **Token, tok *Token, basety *Type) *Node {
+func declaration(rest **Token, tok *Token, basety *Type, attr *VarAttr) *Node {
 	head := Node{}
 	cur := &head
 	i := 0
@@ -740,6 +759,9 @@ func declaration(rest **Token, tok *Token, basety *Type) *Node {
 		}
 
 		vara := NewLVar(getIdent(ty.name), ty)
+		if attr != nil && attr.align != 0 {
+			vara.align = attr.align
+		}
 
 		if tok.equal("=") {
 			expr := lvarInitializer(&tok, tok.next, vara)
@@ -1117,7 +1139,7 @@ func gvarInitializer(rest **Token, tok *Token, vara *Obj) {
 
 var typenames = []string{
 	"void", "_Bool", "char", "short", "int", "long", "struct", "union",
-	"typedef", "enum", "static", "extern",
+	"typedef", "enum", "static", "extern", "_Alignas",
 }
 
 // Returns true if a given token represents a type.
@@ -1231,7 +1253,7 @@ func stmt(rest **Token, tok *Token) *Node {
 
 		if isTypename(tok) {
 			basety := declspec(&tok, tok, nil)
-			node.init = declaration(&tok, tok, basety)
+			node.init = declaration(&tok, tok, basety, nil)
 		} else {
 			node.init = exprStmt(&tok, tok)
 		}
@@ -1349,7 +1371,7 @@ func compoundStmt(rest **Token, tok *Token) *Node {
 				continue
 			}
 
-			cur.next = declaration(&tok, tok, basety)
+			cur.next = declaration(&tok, tok, basety, &attr)
 			cur = cur.next
 		} else {
 			cur.next = stmt(&tok, tok)
@@ -1936,7 +1958,8 @@ func structMembers(rest **Token, tok *Token, ty *Type) {
 	idx := 0
 
 	for !tok.equal("}") {
-		basety := declspec(&tok, tok, nil)
+		attr := VarAttr{}
+		basety := declspec(&tok, tok, &attr)
 		first := true
 
 		for !consume(&tok, tok, ";") {
@@ -1950,6 +1973,11 @@ func structMembers(rest **Token, tok *Token, ty *Type) {
 			mem.name = mem.ty.name
 			mem.idx = idx
 			idx++
+			if attr.align != 0 {
+				mem.align = attr.align
+			} else {
+				mem.align = mem.ty.align
+			}
 			cur.next = mem
 			cur = cur.next
 		}
@@ -2024,12 +2052,12 @@ func structDecl(rest **Token, tok *Token) *Type {
 	// Assign offsets within the struct to members.
 	offset := 0
 	for mem := ty.members; mem != nil; mem = mem.next {
-		offset = alignTo(offset, mem.ty.align)
+		offset = alignTo(offset, mem.align)
 		mem.offset = offset
 		offset += mem.ty.size
 
-		if ty.align < mem.ty.align {
-			ty.align = mem.ty.align
+		if ty.align < mem.align {
+			ty.align = mem.align
 		}
 	}
 	ty.size = alignTo(offset, ty.align)
@@ -2049,8 +2077,8 @@ func unionDecl(rest **Token, tok *Token) *Type {
 	// are already initialized to zero. We need to compute the
 	// alignment and the size though.
 	for mem := ty.members; mem != nil; mem = mem.next {
-		if ty.align < mem.ty.align {
-			ty.align = mem.ty.align
+		if ty.align < mem.align {
+			ty.align = mem.align
 		}
 		if ty.size < mem.ty.size {
 			ty.size = mem.ty.size
@@ -2187,6 +2215,7 @@ func funcall(rest **Token, tok *Token) *Node {
 // | "(" expr ")"
 // | "sizeof" "(" type-name ")"
 // | "sizeof" unary
+// | "_Alignof" "(" type-name ")"
 // | ident func-args?
 // | str
 // | num
@@ -2217,6 +2246,13 @@ func primary(rest **Token, tok *Token) *Node {
 		node := unary(rest, tok.next)
 		node.addType()
 		return NewNum(int64(node.ty.size), tok)
+	}
+
+	if tok.equal("_Alignof") {
+		tok = tok.next.skip("(")
+		ty := typename(&tok, tok)
+		*rest = tok.skip(")")
+		return NewNum(int64(ty.align), tok)
 	}
 
 	if tok.kind == TK_IDENT {
@@ -2340,6 +2376,9 @@ func globalVariable(tok *Token, basety *Type, attr *VarAttr) *Token {
 		ty := declarator(&tok, tok, basety)
 		vara := NewGVar(getIdent(ty.name), ty)
 		vara.isDefinition = !attr.isExtern
+		if attr.align != 0 {
+			vara.align = attr.align
+		}
 
 		if tok.equal("=") {
 			gvarInitializer(&tok, tok.next, vara)

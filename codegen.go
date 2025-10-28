@@ -539,7 +539,7 @@ func (a X64) emitData(prog *Obj) {
 		}
 
 		println("  .globl %s", vara.name)
-		println("  .align %d", vara.ty.align)
+		println("  .align %d", vara.align)
 
 		if len(vara.initData) > 0 {
 			println("  .data")
@@ -1001,7 +1001,10 @@ func (a RiscV) emitData(prog *Obj) {
 		}
 
 		println("  .globl %s", vara.name)
-		println("  .align %d", simpleLog2(vara.ty.align))
+		if vara.align == 0 {
+			fail("align can not be 0!")
+		}
+		println("  .align %d", simpleLog2(vara.align))
 
 		if len(vara.initData) > 0 {
 			println("  .data")
@@ -1065,7 +1068,7 @@ func assignLVarOffsets(prog *Obj) {
 		offset := 0
 		for vara := fn.locals; vara != nil; vara = vara.next {
 			offset += vara.ty.size
-			offset = alignTo(offset, vara.ty.align)
+			offset = alignTo(offset, vara.align)
 			vara.offset = -offset
 		}
 		fn.stackSize = alignTo(offset, 16)
