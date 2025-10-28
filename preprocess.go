@@ -107,6 +107,19 @@ func hidesetContains(hs *Hideset, s string, l int) bool {
 	return false
 }
 
+func hidesetIntersection(hs1, hs2 *Hideset) *Hideset {
+	head := Hideset{}
+	cur := &head
+
+	for ; hs1 != nil; hs1 = hs1.next {
+		if hidesetContains(hs2, hs1.name, len(hs1.name)) {
+			cur.next = newHideset(hs1.name)
+			cur = cur.next
+		}
+	}
+	return head.next
+}
+
 func addHideset(tok *Token, hs *Hideset) *Token {
 	head := Token{}
 	cur := &head
@@ -331,7 +344,8 @@ func readMacroArgs(rest **Token, tok *Token, params *MacroParam) *MacroArg {
 	if pp != nil {
 		failTok(start, "too many arguments")
 	}
-	*rest = tok.skip(")")
+	tok.skip(")")
+	*rest = tok
 	return head.next
 }
 
@@ -402,8 +416,16 @@ func expandMacro(rest **Token, tok *Token) bool {
 	}
 
 	// Function-like macro application
+	macroToken := tok
 	args := readMacroArgs(&tok, tok, m.params)
-	*rest = subst(m.body, args).append(tok)
+	rparen := tok
+
+	hs := hidesetIntersection(macroToken.hideset, rparen.hideset)
+	hs = hidesetUnion(hs, newHideset(m.name))
+
+	body := subst(m.body, args)
+	body = addHideset(body, hs)
+	*rest = body.append(tok.next)
 	return true
 }
 
