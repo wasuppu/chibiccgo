@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"math"
+	"unsafe"
 )
 
 // All local variable instances created during parsing are
@@ -920,10 +921,24 @@ func stringInitializer(rest **Token, tok *Token, init *Initializer) {
 		*init = *NewInitializer(arrayOf(init.ty.base, tok.ty.arrayLen), false)
 	}
 
-	len := min(init.ty.arrayLen, tok.ty.arrayLen)
-	for i := range len {
-		init.children[i].expr = NewNum(int64(tok.str[i]), tok)
+	l := min(init.ty.arrayLen, tok.ty.arrayLen)
+
+	switch init.ty.base.size {
+	case 1:
+		str := tok.str
+		for i := range l {
+			init.children[i].expr = NewNum(int64(str[i]), tok)
+		}
+	case 2:
+		buf := []byte(tok.str)
+		str := *(*[]uint16)(unsafe.Pointer(&buf))
+		for i := range l {
+			init.children[i].expr = NewNum(int64(str[i]), tok)
+		}
+	default:
+		unreachable()
 	}
+
 	*rest = tok.next
 }
 

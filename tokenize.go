@@ -665,7 +665,7 @@ func tokenize(file *File) *Token {
 		if strings.HasPrefix(input[p:], "L'") {
 			cur.next = readCharLiteral(p, p+1, tyInt)
 			cur = cur.next
-			p = cur.loc + cur.len
+			p += cur.len
 			continue
 		}
 
