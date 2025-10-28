@@ -14,6 +14,9 @@ var source string
 var currentInputLoc int
 var currentFilename string
 
+// True if the current position is at the beginning of a line
+var atBol bool
+
 var kws = []string{
 	"return", "if", "else", "for", "while", "int", "sizeof", "char",
 	"struct", "union", "short", "long", "void", "typedef", "_Bool",
@@ -53,16 +56,20 @@ type Token struct {
 	ty     *Type     // Used if TK_NUM or TK_STR
 	str    string    // String literal contents including terminating '\0'
 	lineno int       // Line number
+	atBol  bool      // True if this token is at beginning of line
 }
 
 // Create a new token.
 func NewToken(kind TokenKind, pos int, len int, lexme string) *Token {
-	return &Token{
+	tok := &Token{
 		kind:   kind,
 		loc:    pos,
 		len:    len,
 		lexeme: lexme,
+		atBol:  atBol,
 	}
+	atBol = false
+	return tok
 }
 
 // Consumes the current token if it matches `op`.
@@ -416,6 +423,8 @@ func tokenize(filename string, input string) *Token {
 	cur := &head
 	p := 0
 
+	atBol = true
+
 	for p < len(input) {
 		// Skip line comments.
 		if strings.HasPrefix(input[p:], "//") {
@@ -433,6 +442,13 @@ func tokenize(filename string, input string) *Token {
 				failAt(p, "unclosed block comment")
 			}
 			p = p + 2 + q + 2
+			continue
+		}
+
+		// Skip newline.
+		if input[p] == '\n' {
+			p++
+			atBol = true
 			continue
 		}
 
