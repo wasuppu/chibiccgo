@@ -100,6 +100,7 @@ type Obj struct {
 	rel      *Relocation
 
 	// Function
+	isInline  bool
 	params    *Obj
 	body      *Node
 	locals    *Obj
@@ -242,6 +243,7 @@ type VarAttr struct {
 	isTypedef bool
 	isStatic  bool
 	isExtern  bool
+	isInline  bool
 	align     int
 }
 
@@ -483,7 +485,7 @@ const (
 )
 
 // declspec = ("void" | "_Bool" | "char" | "short" | "int" | "long"
-// | "typedef" | "static" | "extern"
+// | "typedef" | "static" | "extern" | "inline"
 // | "signed" | "unsigned"
 // | struct-decl | union-decl | typedef-name
 // | enum-specifier | typeof-specifier
@@ -495,7 +497,8 @@ func declspec(rest **Token, tok *Token, attr *VarAttr) *Type {
 
 	for isTypename(tok) {
 		// Handle storage class specifiers.
-		if tok.equal("typedef") || tok.equal("static") || tok.equal("extern") {
+		if tok.equal("typedef") || tok.equal("static") || tok.equal("extern") ||
+			tok.equal("inline") {
 			if attr == nil {
 				failTok(tok, "storage class specifier is not allowed in this context")
 			}
@@ -504,12 +507,24 @@ func declspec(rest **Token, tok *Token, attr *VarAttr) *Type {
 				attr.isTypedef = true
 			} else if tok.equal("static") {
 				attr.isStatic = true
-			} else {
+			} else if tok.equal("extern") {
 				attr.isExtern = true
+			} else {
+				attr.isInline = true
 			}
 
-			if attr.isTypedef && (attr.isStatic && attr.isExtern) {
-				failTok(tok, "typedef and static may not be used together with static or extern")
+			var isStatic, isExtern, isInline int
+			if attr.isStatic {
+				isStatic = 1
+			}
+			if attr.isExtern {
+				isExtern = 1
+			}
+			if attr.isInline {
+				isInline = 1
+			}
+			if attr.isTypedef && (isStatic+isExtern+isInline > 1) {
+				failTok(tok, "typedef and static may not be used together with static, extern or inline")
 			}
 			tok = tok.next
 			continue
@@ -1528,7 +1543,7 @@ var typenames = []string{
 	"void", "_Bool", "char", "short", "int", "long", "struct", "union",
 	"typedef", "enum", "static", "extern", "_Alignas", "signed", "unsigned",
 	"const", "volatile", "auto", "register", "restrict", "__restrict",
-	"__restrict__", "_Noreturn", "float", "double", "typeof",
+	"__restrict__", "_Noreturn", "float", "double", "typeof", "inline",
 }
 
 // Returns true if a given token represents a type.
@@ -3152,7 +3167,8 @@ func function(tok *Token, basety *Type, attr *VarAttr) *Token {
 	fn := NewGVar(getIdent(ty.name), ty)
 	fn.isFunction = true
 	fn.isDefinition = !consume(&tok, tok, ";")
-	fn.isStatic = attr.isStatic
+	fn.isStatic = attr.isStatic || (attr.isInline && !attr.isExtern)
+	fn.isInline = attr.isInline
 
 	if !fn.isDefinition {
 		return tok
