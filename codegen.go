@@ -798,6 +798,11 @@ func (a X64) genAddr(node *Node) {
 			a.genExpr(node)
 			return
 		}
+	case ND_ASSIGN, ND_COND:
+		if node.ty.kind == TY_STRUCT || node.ty.kind == TY_UNION {
+			a.genExpr(node)
+			return
+		}
 	case ND_VLA_PTR:
 		println("  lea %d(%%rbp), %%rax", node.vara.offset)
 		return
