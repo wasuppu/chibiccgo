@@ -952,6 +952,13 @@ func writeGVarData(init *Initializer, ty *Type, buf []byte, offset int) {
 		return
 	}
 
+	if ty.kind == TY_STRUCT {
+		for mem := ty.members; mem != nil; mem = mem.next {
+			writeGVarData(init.children[mem.idx], mem.ty, buf, offset+mem.offset)
+		}
+		return
+	}
+
 	if init.expr != nil {
 		writeBuf(buf[offset:], uint64(eval(init.expr)), ty.size)
 	}
