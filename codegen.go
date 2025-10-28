@@ -6,6 +6,13 @@ import (
 	"os"
 )
 
+const (
+	GP_MAX_X = 6
+	FP_MAX_X = 8
+	GP_MAX_R = 8
+	FP_MAX_R = 8
+)
+
 var ArchName string
 var outputFile *os.File
 var depth int
@@ -380,18 +387,58 @@ func (a X64) cmpZero(ty *Type) {
 	}
 }
 
-func (a X64) pushArgs(args *Node) {
-	if args != nil {
-		a.pushArgs(args.next)
+func (a X64) pushArgs2(args *Node, firstPass bool) {
+	if args == nil {
+		return
+	}
 
-		a.genExpr(args)
-		if args.ty.isFlonum() {
-			a.pushf()
+	a.pushArgs2(args.next, firstPass)
+
+	if (firstPass && !args.passByStack) || (!firstPass && args.passByStack) {
+		return
+	}
+
+	a.genExpr(args)
+
+	if args.ty.isFlonum() {
+		a.pushf()
+	} else {
+		a.push()
+	}
+}
+
+// Load function call arguments. Arguments are already evaluated and
+// stored to the stack as local variables. What we need to do in this
+// function is to load them to registers or push them to the stack as
+// specified by the x86-64 psABI.
+func (a X64) pushArgs(args *Node) int {
+	stack, gp, fp := 0, 0, 0
+
+	for arg := args; arg != nil; arg = arg.next {
+		if arg.ty.isFlonum() {
+			if fp >= FP_MAX_X {
+				arg.passByStack = true
+				stack++
+			}
+			fp++
 		} else {
-			a.push()
+			if gp >= GP_MAX_X {
+				arg.passByStack = true
+				stack++
+			}
+			gp++
 		}
 	}
 
+	if (depth+stack)%2 == 1 {
+		println("  sub $8, %%rsp")
+		depth++
+		stack++
+	}
+
+	a.pushArgs2(args, true)
+	a.pushArgs2(args, false)
+	return stack
 }
 
 // Compute the absolute address of a given node.
@@ -566,26 +613,29 @@ func (a X64) genExpr(node *Node) {
 		println(".L.end.%d:", c)
 		return
 	case ND_FUNCALL:
-		a.pushArgs(node.args)
+		stackArgs := a.pushArgs(node.args)
 		a.genExpr(node.lhs)
 		gp, fp := 0, 0
 		for arg := node.args; arg != nil; arg = arg.next {
 			if arg.ty.isFlonum() {
-				a.popf(fp)
-				fp++
+				if fp < FP_MAX_X {
+					a.popf(fp)
+					fp++
+				}
 			} else {
-				a.pop(argReg64x[gp])
-				gp++
+				if gp < GP_MAX_X {
+					a.pop(argReg64x[gp])
+					gp++
+				}
 			}
 		}
 
-		if depth%2 == 0 {
-			println("  call *%%rax")
-		} else {
-			println("  sub $8, %%rsp")
-			println("  call *%%rax")
-			println("  add $8, %%rsp")
-		}
+		println("  mov %%rax, %%r10")
+		println("  mov $%d, %%rax", fp)
+		println("  call *%%r10")
+		println("  add $%d, %%rsp", stackArgs*8)
+
+		depth -= stackArgs
 
 		// It looks like the most significant 48 or 56 bits in RAX may
 		// contain garbage if a function return type is short or bool/char,
@@ -1149,17 +1199,62 @@ func (a RiscV) cmpZero(ty *Type) {
 	}
 }
 
-func (a RiscV) pushArgs(args *Node) {
-	if args != nil {
-		a.pushArgs(args.next)
+func (a RiscV) pushArgs2(args *Node, firstPass bool) {
+	if args == nil {
+		return
+	}
 
-		a.genExpr(args)
-		if args.ty.isFlonum() {
-			a.pushf()
+	a.pushArgs2(args.next, firstPass)
+
+	if (firstPass && !args.passByStack) || (!firstPass && args.passByStack) {
+		return
+	}
+
+	a.genExpr(args)
+
+	if args.ty.isFlonum() {
+		a.pushf()
+	} else {
+		a.push()
+	}
+}
+
+// Load function call arguments. Arguments are already evaluated and
+// stored to the stack as local variables. What we need to do in this
+// function is to load them to registers or push them to the stack as
+// specified by the x86-64 psABI.
+func (a RiscV) pushArgs(args *Node) int {
+	stack, gp, fp := 0, 0, 0
+
+	for arg := args; arg != nil; arg = arg.next {
+		if arg.ty.isFlonum() {
+			if fp < FP_MAX_R {
+				fp++
+			} else if gp < GP_MAX_R {
+				gp++
+			} else {
+				arg.passByStack = true
+				stack++
+			}
 		} else {
-			a.push()
+			if gp < GP_MAX_R {
+				gp++
+			} else {
+				arg.passByStack = true
+				stack++
+			}
 		}
 	}
+
+	if (depth+stack)%2 == 1 {
+		println("  addi sp, sp, -8")
+		depth++
+		stack++
+	}
+
+	a.pushArgs2(args, true)
+	a.pushArgs2(args, false)
+	return stack
 }
 
 // Compute the absolute address of a given node.
@@ -1339,7 +1434,7 @@ func (a RiscV) genExpr(node *Node) {
 		println(".L.end.%d:", c)
 		return
 	case ND_FUNCALL:
-		a.pushArgs(node.args)
+		stackArgs := a.pushArgs(node.args)
 		a.genExpr(node.lhs)
 		println("  mv t5, a0")
 
@@ -1347,7 +1442,7 @@ func (a RiscV) genExpr(node *Node) {
 		curArg := node.functy.params
 		for arg := node.args; arg != nil; arg = arg.next {
 			if node.functy.isVariadic && curArg == nil {
-				if gp < 8 {
+				if gp < GP_MAX_R {
 					a.pop(argRegR[gp])
 					gp++
 				}
@@ -1356,27 +1451,25 @@ func (a RiscV) genExpr(node *Node) {
 
 			curArg = curArg.next
 			if arg.ty.isFlonum() {
-				if fp < 8 {
+				if fp < FP_MAX_R {
 					a.popf(fp)
 					fp++
-				} else if gp < 8 {
+				} else if gp < GP_MAX_R {
 					a.pop(argRegR[gp])
 					gp++
 				}
 			} else {
-				if gp < 8 {
+				if gp < GP_MAX_R {
 					a.pop(argRegR[gp])
 					gp++
 				}
 			}
 		}
 
-		if depth%2 == 0 {
-			println("  jalr t5")
-		} else {
-			println("  addi sp, sp, -8")
-			println("  jalr t5")
-			println("  addi sp, sp, 8")
+		println("  jalr t5")
+		if stackArgs != 0 {
+			depth -= stackArgs
+			println("  addi sp, sp, %d", stackArgs*8)
 		}
 
 		// It looks like the most significant 48 or 56 bits in RAX may
@@ -1651,7 +1744,7 @@ func (a RiscV) emitText(prog *Obj) {
 		gp, fp := 0, 0
 		for vara := fn.params; vara != nil; vara = vara.next {
 			if vara.ty.isFlonum() {
-				if fp < 8 {
+				if fp < FP_MAX_R {
 					a.storeFP(fp, vara.offset, vara.ty.size)
 					fp++
 				} else {
@@ -1666,7 +1759,7 @@ func (a RiscV) emitText(prog *Obj) {
 
 		if fn.vaArea != nil {
 			offset := fn.vaArea.offset
-			for gp < 8 {
+			for gp < GP_MAX_R {
 				a.storeGP(gp, offset, 8)
 				gp++
 				offset += 8
