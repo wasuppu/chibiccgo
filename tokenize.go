@@ -221,6 +221,25 @@ func tokenize(filename string, input string) *Token {
 	p := 0
 
 	for p < len(input) {
+		// Skip line comments.
+		if strings.HasPrefix(input[p:], "//") {
+			p += 2
+			for input[p] != '\n' {
+				p++
+			}
+			continue
+		}
+
+		// Skip block comments.
+		if strings.HasPrefix(input[p:], "/*") {
+			q := strings.Index(input[p+2:], "*/")
+			if q == -1 {
+				failAt(p, "unclosed block comment")
+			}
+			p = p + 2 + q + 2
+			continue
+		}
+
 		// Skip whitespace characters.
 		if unicode.IsSpace(rune(input[p])) {
 			p++
