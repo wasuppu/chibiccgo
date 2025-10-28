@@ -17,6 +17,8 @@ const (
 	FILE_C
 	FILE_ASM
 	FILE_OBJ
+	FILE_AR
+	FILE_DSO
 )
 
 var optX FileType
@@ -646,12 +648,21 @@ func (a RiscV) runLinker(inputs []string, output string) {
 
 func getFileType(filename string) FileType {
 	ext := filepath.Ext(filename)
-	if ext == ".o" {
-		return FILE_OBJ
-	}
 
 	if optX != FILE_NONE {
 		return optX
+	}
+
+	if ext == ".a" {
+		return FILE_AR
+	}
+
+	if ext == ".so" {
+		return FILE_DSO
+	}
+
+	if ext == ".o" {
+		return FILE_OBJ
 	}
 
 	if ext == ".c" {
@@ -704,8 +715,8 @@ func main() {
 
 		filetype := getFileType(input)
 
-		// Handle .o
-		if filetype == FILE_OBJ {
+		// Handle .o or .a
+		if filetype == FILE_OBJ || filetype == FILE_AR || filetype == FILE_DSO {
 			ldArgs = append(ldArgs, input)
 			continue
 		}
