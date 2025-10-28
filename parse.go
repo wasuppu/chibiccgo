@@ -648,8 +648,12 @@ func funcParams(rest **Token, tok *Token, ty *Type) *Type {
 	return ty
 }
 
-// array-dimensions = const-expr? "]" type-suffix
+// array-dimensions = ("static" | "restrict")* const-expr? "]" type-suffix
 func arrayDimensions(rest **Token, tok *Token, ty *Type) *Type {
+	for tok.equal("static") || tok.equal("restrict") {
+		tok = tok.next
+	}
+
 	if tok.equal("]") {
 		ty = typeSuffix(rest, tok.next, ty)
 		return arrayOf(ty, -1)
