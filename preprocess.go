@@ -939,6 +939,15 @@ func lineMacro(tmpl *Token) *Token {
 	return newNumToken(tmpl.lineno, tmpl)
 }
 
+// __COUNTER__ is expanded to serial values starting from 0.
+var Counter int
+
+func counterMacro(tmpl *Token) *Token {
+	t := Counter
+	Counter++
+	return newNumToken(t, tmpl)
+}
+
 // __DATE__ is expanded to the current date, e.g. "May 17 2020".
 func formatDate(t time.Time) string {
 	months := []string{
@@ -1001,6 +1010,7 @@ func (a X64) initMacro() {
 
 	addBuiltin("__FILE__", fileMacro)
 	addBuiltin("__LINE__", lineMacro)
+	addBuiltin("__COUNTER__", counterMacro)
 
 	now := time.Now()
 	defineMacro("__DATE__", formatDate(now))
