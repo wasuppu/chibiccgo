@@ -276,6 +276,34 @@ func (a X64) genExpr(node *Node) {
 		a.genExpr(node.lhs)
 		println("  not %%rax")
 		return
+	case ND_LOGAND:
+		c := count()
+		a.genExpr(node.lhs)
+		println("  cmp $0, %%rax")
+		println("  je .L.false.%d", c)
+		a.genExpr(node.rhs)
+		println("  cmp $0, %%rax")
+		println("  je .L.false.%d", c)
+		println("  mov $1, %%rax")
+		println("  jmp .L.end.%d", c)
+		println(".L.false.%d:", c)
+		println("  mov $0, %%rax")
+		println(".L.end.%d:", c)
+		return
+	case ND_LOGOR:
+		c := count()
+		a.genExpr(node.lhs)
+		println("  cmp $0, %%rax")
+		println("  jne .L.true.%d", c)
+		a.genExpr(node.rhs)
+		println("  cmp $0, %%rax")
+		println("  jne .L.true.%d", c)
+		println("  mov $0, %%rax")
+		println("  jmp .L.end.%d", c)
+		println(".L.true.%d:", c)
+		println("  mov $1, %%rax")
+		println(".L.end.%d:", c)
+		return
 	case ND_FUNCALL:
 		nargs := 0
 		for arg := node.args; arg != nil; arg = arg.next {
@@ -641,6 +669,30 @@ func (a RiscV) genExpr(node *Node) {
 	case ND_BITNOT:
 		a.genExpr(node.lhs)
 		println("  not a0, a0")
+		return
+	case ND_LOGAND:
+		c := count()
+		a.genExpr(node.lhs)
+		println("  beqz a0, .L.false.%d", c)
+		a.genExpr(node.rhs)
+		println("  beqz a0, .L.false.%d", c)
+		println("  li a0, 1")
+		println("  j .L.end.%d", c)
+		println(".L.false.%d:", c)
+		println("  li a0, 0")
+		println(".L.end.%d:", c)
+		return
+	case ND_LOGOR:
+		c := count()
+		a.genExpr(node.lhs)
+		println("  bnez a0, .L.true.%d", c)
+		a.genExpr(node.rhs)
+		println("  bnez a0, .L.true.%d", c)
+		println("  li a0, 0")
+		println("  j .L.end.%d", c)
+		println(".L.true.%d:", c)
+		println("  li a0, 1")
+		println(".L.end.%d:", c)
 		return
 	case ND_FUNCALL:
 		nargs := 0

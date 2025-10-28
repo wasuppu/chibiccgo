@@ -70,6 +70,8 @@ const (
 	ND_DEREF                     // unary *
 	ND_NOT                       // !
 	ND_BITNOT                    // ~
+	ND_LOGAND                    // &&
+	ND_LOGOR                     // ||
 	ND_RETURN                    // "return"
 	ND_IF                        // "if"
 	ND_FOR                       // "for"
@@ -773,10 +775,10 @@ func toAssign(binary *Node) *Node {
 	return NewBinary(ND_COMMA, expr1, expr2, tok)
 }
 
-// assign    = bitor (assign-op assign)?
+// assign    = logor (assign-op assign)?
 // assign-op = "=" | "+=" | "-=" | "*=" | "/=" | "%=" | "&=" | "|=" | "^="
 func assign(rest **Token, tok *Token) *Node {
-	node := bitor(&tok, tok)
+	node := logor(&tok, tok)
 
 	if tok.equal("=") {
 		return NewBinary(ND_ASSIGN, node, assign(rest, tok.next), tok)
@@ -814,6 +816,28 @@ func assign(rest **Token, tok *Token) *Node {
 		return toAssign(NewBinary(ND_BITXOR, node, assign(rest, tok.next), tok))
 	}
 
+	*rest = tok
+	return node
+}
+
+// logor = logand ("||" logand)*
+func logor(rest **Token, tok *Token) *Node {
+	node := logand(&tok, tok)
+	for tok.equal("||") {
+		start := tok
+		node = NewBinary(ND_LOGOR, node, logand(&tok, tok.next), start)
+	}
+	*rest = tok
+	return node
+}
+
+// logand = bitor ("&&" bitor)*
+func logand(rest **Token, tok *Token) *Node {
+	node := bitor(&tok, tok)
+	for tok.equal("&&") {
+		start := tok
+		node = NewBinary(ND_LOGAND, node, bitor(&tok, tok.next), start)
+	}
 	*rest = tok
 	return node
 }

@@ -160,7 +160,7 @@ func (node *Node) addType() {
 	case ND_FUNCALL:
 		node.ty = tyLong
 		return
-	case ND_NOT:
+	case ND_NOT, ND_LOGOR, ND_LOGAND:
 		node.ty = tyInt
 		return
 	case ND_BITNOT:
