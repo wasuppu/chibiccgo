@@ -277,7 +277,7 @@ func parseArgs(args []string) {
 			continue
 		}
 
-		if strings.HasPrefix(args[i], "-l") {
+		if strings.HasPrefix(args[i], "-l") || strings.HasPrefix(args[i], "-Wl,") {
 			inputPaths = append(inputPaths, args[i])
 			continue
 		}
@@ -927,6 +927,17 @@ func main() {
 
 		if strings.HasPrefix(input, "-l") {
 			ldArgs = append(ldArgs, input)
+			continue
+		}
+
+		if strings.HasPrefix(input, "-Wl,") {
+			s := input[4:]
+			arg := strings.Index(s, ",")
+			for arg != -1 {
+				ldArgs = append(ldArgs, s[:arg])
+				s = s[:arg]
+				arg = strings.Index(s, ",")
+			}
 			continue
 		}
 
