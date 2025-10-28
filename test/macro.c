@@ -344,6 +344,9 @@ int main() {
 
 #undef foo
 
+  // c188
+  ASSERT(1, __STDC__);
+
   printf("OK\n");
   return 0;
 }

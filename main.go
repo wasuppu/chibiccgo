@@ -267,7 +267,7 @@ func cc1(target Arch) {
 	if tok == nil {
 		fail("fail to tokenize %s", basefile)
 	}
-	tok = preprocess(tok)
+	tok = preprocess(target, tok)
 
 	// If -E is given, print out preprocessed C code as a result.
 	if optE {

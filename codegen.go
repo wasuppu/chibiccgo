@@ -199,6 +199,7 @@ type Arch interface {
 	assemble(input, output string)
 	runLinker(inputs []string, output string)
 	addDefaultIncludePaths(argv0 string)
+	initMacro()
 }
 
 type X64 struct{}
