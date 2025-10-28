@@ -7,7 +7,8 @@ import (
 var depth int
 var currentGenFn *Obj
 
-var x64ArgReg = []string{"%rdi", "%rsi", "%rdx", "%rcx", "%r8", "%r9"}
+var argReg8x = []string{"%dil", "%sil", "%dl", "%cl", "%r8b", "%r9b"}
+var argReg64x = []string{"%rdi", "%rsi", "%rdx", "%rcx", "%r8", "%r9"}
 var argRegR = []string{"a0", "a1", "a2", "a3", "a4", "a5"}
 
 func chooseArch(arch string) Arch {
@@ -62,13 +63,22 @@ func (a X64) load(ty *Type) {
 		return
 	}
 
-	fmt.Printf("  mov (%%rax), %%rax\n")
+	if ty.size == 1 {
+		fmt.Printf("  movsbq (%%rax), %%rax\n")
+	} else {
+		fmt.Printf("  mov (%%rax), %%rax\n")
+	}
 }
 
 // Store %rax to an address that the stack top is pointing to.
-func (a X64) store() {
+func (a X64) store(ty *Type) {
 	a.pop("%rdi")
-	fmt.Printf("  mov %%rax, (%%rdi)\n")
+
+	if ty.size == 1 {
+		fmt.Printf("  mov %%al, (%%rdi)\n")
+	} else {
+		fmt.Printf("  mov %%rax, (%%rdi)\n")
+	}
 }
 
 // Compute the absolute address of a given node.
@@ -117,7 +127,7 @@ func (a X64) genExpr(node *Node) {
 		a.genAddr(node.lhs)
 		a.push()
 		a.genExpr(node.rhs)
-		a.store()
+		a.store(node.ty)
 		return
 	case ND_FUNCALL:
 		nargs := 0
@@ -128,7 +138,7 @@ func (a X64) genExpr(node *Node) {
 		}
 
 		for i := nargs - 1; i >= 0; i-- {
-			a.pop(x64ArgReg[i])
+			a.pop(argReg64x[i])
 		}
 
 		fmt.Printf("  mov $0, %%rax\n")
@@ -239,7 +249,11 @@ func (a X64) emitText(prog *Obj) {
 		// Save passed-by-register arguments to the stack
 		i := 0
 		for vara := fn.params; vara != nil; vara = vara.next {
-			fmt.Printf("  mov %s, %d(%%rbp)\n", x64ArgReg[i], vara.offset)
+			if vara.ty.size == 1 {
+				fmt.Printf("  mov %s, %d(%%rbp)\n", argReg8x[i], vara.offset)
+			} else {
+				fmt.Printf("  mov %s, %d(%%rbp)\n", argReg64x[i], vara.offset)
+			}
 			i++
 		}
 
@@ -294,13 +308,22 @@ func (a RiscV) load(ty *Type) {
 		return
 	}
 
-	fmt.Printf("  ld a0, 0(a0)\n")
+	if ty.size == 1 {
+		fmt.Printf("  lb a0, 0(a0)\n")
+	} else {
+		fmt.Printf("  ld a0, 0(a0)\n")
+	}
 }
 
 // Store %rax to an address that the stack top is pointing to.
-func (a RiscV) store() {
+func (a RiscV) store(ty *Type) {
 	a.pop("a1")
-	fmt.Printf("  sd a0, 0(a1)\n")
+
+	if ty.size == 1 {
+		fmt.Printf("  sb a0, 0(a1)\n")
+	} else {
+		fmt.Printf("  sd a0, 0(a1)\n")
+	}
 }
 
 // Compute the absolute address of a given node.
@@ -347,7 +370,7 @@ func (a RiscV) genExpr(node *Node) {
 		a.genAddr(node.lhs)
 		a.push()
 		a.genExpr(node.rhs)
-		a.store()
+		a.store(node.ty)
 		return
 	case ND_FUNCALL:
 		nargs := 0
@@ -466,7 +489,11 @@ func (a RiscV) emitText(prog *Obj) {
 		// Save passed-by-register arguments to the stack
 		i := 0
 		for vara := fn.params; vara != nil; vara = vara.next {
-			fmt.Printf("  sd %s, %d(fp)\n", argRegR[i], vara.offset)
+			if vara.ty.size == 1 {
+				fmt.Printf("  sb %s, %d(fp)\n", argRegR[i], vara.offset)
+			} else {
+				fmt.Printf("  sd %s, %d(fp)\n", argRegR[i], vara.offset)
+			}
 			i++
 		}
 

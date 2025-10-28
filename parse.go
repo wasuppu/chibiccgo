@@ -171,8 +171,13 @@ func getNumber(tok *Token) int {
 	return tok.val
 }
 
-// declspec = "int"
+// declspec = "char" | "int"
 func declspec(rest **Token, tok *Token) *Type {
+	if tok.equal("char") {
+		*rest = tok.next
+		return tyChar
+	}
+
 	*rest = tok.skip("int")
 	return tyInt
 }
@@ -267,6 +272,11 @@ func declaration(rest **Token, tok *Token) *Node {
 	return node
 }
 
+// Returns true if a given token represents a type.
+func isTypename(tok *Token) bool {
+	return tok.equal("char") || tok.equal("int")
+}
+
 // stmt = "return" expr ";"
 // | "if" "(" expr ")" stmt ("else" stmt)?
 // | "for" "(" expr-stmt expr? ";" expr? ")" stmt
@@ -337,7 +347,7 @@ func compoundStmt(rest **Token, tok *Token) *Node {
 	head := Node{}
 	cur := &head
 	for !tok.equal("}") {
-		if tok.equal("int") {
+		if isTypename(tok) {
 			cur.next = declaration(&tok, tok)
 			cur = cur.next
 		} else {

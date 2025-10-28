@@ -12,7 +12,7 @@ import (
 var source string
 var currentInputLoc int
 
-var kws = []string{"return", "if", "else", "for", "while", "int", "sizeof"}
+var kws = []string{"return", "if", "else", "for", "while", "int", "sizeof", "char"}
 
 // Token
 type TokenKind int
