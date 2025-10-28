@@ -255,8 +255,8 @@ func readStringLiteral(start int) *Token {
 	return tok
 }
 
-func readCharLiteral(start int) *Token {
-	p := start + 1
+func readCharLiteral(start, quote int) *Token {
+	p := quote + 1
 	if source[p] == '\x00' {
 		failAt(start, "unclosed char literal")
 	}
@@ -511,9 +511,17 @@ func tokenize(file *File) *Token {
 
 		// Character literal
 		if input[p] == '\'' {
-			cur.next = readCharLiteral(p)
+			cur.next = readCharLiteral(p, p)
 			cur = cur.next
 			p += cur.len
+			continue
+		}
+
+		// Wide character literal
+		if strings.HasPrefix(input[p:], "L'") {
+			cur.next = readCharLiteral(p, p+1)
+			cur = cur.next
+			p = cur.loc + cur.len
 			continue
 		}
 

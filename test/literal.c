@@ -100,6 +100,10 @@ int main() {
 of(char), \
          "sizeof(char)");
 
+  // c194
+  ASSERT(4, sizeof(L'\0'));
+  ASSERT(97, L'a');
+
   printf("OK\n");
   return 0;
 }
