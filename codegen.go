@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"os"
 )
 
 var depth int
@@ -31,29 +32,29 @@ type Arch interface {
 type X64 struct{}
 
 func (a X64) prologue(fname string, stackSize int) {
-	fmt.Printf("  .globl %s\n", fname)
-	fmt.Printf("  .text\n")
-	fmt.Printf("%s:\n", fname)
+	println("  .globl %s", fname)
+	println("  .text")
+	println("%s:", fname)
 
-	fmt.Printf("  push %%rbp\n")
-	fmt.Printf("  mov %%rsp, %%rbp\n")
-	fmt.Printf("  sub $%d, %%rsp\n", stackSize)
+	println("  push %%rbp")
+	println("  mov %%rsp, %%rbp")
+	println("  sub $%d, %%rsp", stackSize)
 }
 
 func (a X64) epilogue(fname string) {
-	fmt.Printf(".L.return.%s:\n", fname)
-	fmt.Printf("  mov %%rbp, %%rsp\n")
-	fmt.Printf("  pop %%rbp\n")
-	fmt.Printf("  ret\n")
+	println(".L.return.%s:", fname)
+	println("  mov %%rbp, %%rsp")
+	println("  pop %%rbp")
+	println("  ret")
 }
 
 func (a X64) push() {
-	fmt.Printf("  push %%rax\n")
+	println("  push %%rax")
 	depth++
 }
 
 func (a X64) pop(arg string) {
-	fmt.Printf("  pop %s\n", arg)
+	println("  pop %s", arg)
 	depth--
 }
 
@@ -64,9 +65,9 @@ func (a X64) load(ty *Type) {
 	}
 
 	if ty.size == 1 {
-		fmt.Printf("  movsbq (%%rax), %%rax\n")
+		println("  movsbq (%%rax), %%rax")
 	} else {
-		fmt.Printf("  mov (%%rax), %%rax\n")
+		println("  mov (%%rax), %%rax")
 	}
 }
 
@@ -75,9 +76,9 @@ func (a X64) store(ty *Type) {
 	a.pop("%rdi")
 
 	if ty.size == 1 {
-		fmt.Printf("  mov %%al, (%%rdi)\n")
+		println("  mov %%al, (%%rdi)")
 	} else {
-		fmt.Printf("  mov %%rax, (%%rdi)\n")
+		println("  mov %%rax, (%%rdi)")
 	}
 }
 
@@ -88,10 +89,10 @@ func (a X64) genAddr(node *Node) {
 	case ND_VAR:
 		if node.vara.isLocal {
 			// Local variable
-			fmt.Printf("  lea %d(%%rbp), %%rax\n", node.vara.offset)
+			println("  lea %d(%%rbp), %%rax", node.vara.offset)
 		} else {
 			// Global variable
-			fmt.Printf("  lea %s(%%rip), %%rax\n", node.vara.name)
+			println("  lea %s(%%rip), %%rax", node.vara.name)
 		}
 		return
 	case ND_DEREF:
@@ -106,11 +107,11 @@ func (a X64) genAddr(node *Node) {
 func (a X64) genExpr(node *Node) {
 	switch node.kind {
 	case ND_NUM:
-		fmt.Printf("  mov $%d, %%rax\n", node.val)
+		println("  mov $%d, %%rax", node.val)
 		return
 	case ND_NEG:
 		a.genExpr(node.lhs)
-		fmt.Printf("  neg %%rax\n")
+		println("  neg %%rax")
 		return
 	case ND_VAR:
 		a.genAddr(node)
@@ -146,8 +147,8 @@ func (a X64) genExpr(node *Node) {
 			a.pop(argReg64x[i])
 		}
 
-		fmt.Printf("  mov $0, %%rax\n")
-		fmt.Printf("  call %s\n", node.funcname)
+		println("  mov $0, %%rax")
+		println("  call %s", node.funcname)
 		return
 	}
 
@@ -158,33 +159,33 @@ func (a X64) genExpr(node *Node) {
 
 	switch node.kind {
 	case ND_ADD:
-		fmt.Printf("  add %%rdi, %%rax\n")
+		println("  add %%rdi, %%rax")
 		return
 	case ND_SUB:
-		fmt.Printf("  sub %%rdi, %%rax\n")
+		println("  sub %%rdi, %%rax")
 		return
 	case ND_MUL:
-		fmt.Printf("  imul %%rdi, %%rax\n")
+		println("  imul %%rdi, %%rax")
 		return
 	case ND_DIV:
-		fmt.Printf("  cqo\n")
-		fmt.Printf("  idiv %%rdi\n")
+		println("  cqo")
+		println("  idiv %%rdi")
 		return
 	case ND_EQ, ND_NE, ND_LT, ND_LE:
-		fmt.Printf("  cmp %%rdi, %%rax\n")
+		println("  cmp %%rdi, %%rax")
 
 		switch node.kind {
 		case ND_EQ:
-			fmt.Printf("  sete %%al\n")
+			println("  sete %%al")
 		case ND_NE:
-			fmt.Printf("  setne %%al\n")
+			println("  setne %%al")
 		case ND_LT:
-			fmt.Printf("  setl %%al\n")
+			println("  setl %%al")
 		case ND_LE:
-			fmt.Printf("  setle %%al\n")
+			println("  setle %%al")
 		}
 
-		fmt.Printf("  movzb %%al, %%rax\n")
+		println("  movzb %%al, %%rax")
 		return
 	}
 
@@ -196,33 +197,33 @@ func (a X64) genStmt(node *Node) {
 	case ND_IF:
 		c := count()
 		a.genExpr(node.cond)
-		fmt.Printf("  cmp $0, %%rax\n")
-		fmt.Printf("  je  .L.else.%d\n", c)
+		println("  cmp $0, %%rax")
+		println("  je  .L.else.%d", c)
 		a.genStmt(node.then)
-		fmt.Printf("  jmp .L.end.%d\n", c)
-		fmt.Printf(".L.else.%d:\n", c)
+		println("  jmp .L.end.%d", c)
+		println(".L.else.%d:", c)
 		if node.els != nil {
 			a.genStmt(node.els)
 		}
-		fmt.Printf(".L.end.%d:\n", c)
+		println(".L.end.%d:", c)
 		return
 	case ND_FOR:
 		c := count()
 		if node.init != nil {
 			a.genStmt(node.init)
 		}
-		fmt.Printf(".L.begin.%d:\n", c)
+		println(".L.begin.%d:", c)
 		if node.cond != nil {
 			a.genExpr(node.cond)
-			fmt.Printf("  cmp $0, %%rax\n")
-			fmt.Printf("  je  .L.end.%d\n", c)
+			println("  cmp $0, %%rax")
+			println("  je  .L.end.%d", c)
 		}
 		a.genStmt(node.then)
 		if node.inc != nil {
 			a.genExpr(node.inc)
 		}
-		fmt.Printf("  jmp .L.begin.%d\n", c)
-		fmt.Printf(".L.end.%d:\n", c)
+		println("  jmp .L.begin.%d", c)
+		println(".L.end.%d:", c)
 		return
 	case ND_BLOCK:
 		for n := node.body; n != nil; n = n.next {
@@ -231,7 +232,7 @@ func (a X64) genStmt(node *Node) {
 		return
 	case ND_RETURN:
 		a.genExpr(node.lhs)
-		fmt.Printf("  jmp .L.return.%s\n", currentGenFn.name)
+		println("  jmp .L.return.%s", currentGenFn.name)
 		return
 	case ND_EXPR_STMT:
 		a.genExpr(node.lhs)
@@ -255,9 +256,9 @@ func (a X64) emitText(prog *Obj) {
 		i := 0
 		for vara := fn.params; vara != nil; vara = vara.next {
 			if vara.ty.size == 1 {
-				fmt.Printf("  mov %s, %d(%%rbp)\n", argReg8x[i], vara.offset)
+				println("  mov %s, %d(%%rbp)", argReg8x[i], vara.offset)
 			} else {
-				fmt.Printf("  mov %s, %d(%%rbp)\n", argReg64x[i], vara.offset)
+				println("  mov %s, %d(%%rbp)", argReg64x[i], vara.offset)
 			}
 			i++
 		}
@@ -274,36 +275,36 @@ func (a X64) emitText(prog *Obj) {
 type RiscV struct{}
 
 func (a RiscV) prologue(fname string, stackSize int) {
-	fmt.Printf("  .globl %s\n", fname)
-	fmt.Printf("  .text\n")
-	fmt.Printf("%s:\n", fname)
+	println("  .globl %s", fname)
+	println("  .text")
+	println("%s:", fname)
 
-	fmt.Printf("  addi sp, sp, -16\n")
-	fmt.Printf("  sd ra, 8(sp)\n")
-	fmt.Printf("  sd fp, 0(sp)\n")
-	fmt.Printf("  mv fp, sp\n")
+	println("  addi sp, sp, -16")
+	println("  sd ra, 8(sp)")
+	println("  sd fp, 0(sp)")
+	println("  mv fp, sp")
 
-	fmt.Printf("  addi sp, sp, -%d\n", stackSize)
+	println("  addi sp, sp, -%d", stackSize)
 }
 
 func (a RiscV) epilogue(fname string) {
-	fmt.Printf(".L.return.%s:\n", fname)
-	fmt.Printf("  mv sp, fp\n")
-	fmt.Printf("  ld fp, 0(sp)\n")
-	fmt.Printf("  ld ra, 8(sp)\n")
-	fmt.Printf("  addi sp, sp, 16\n")
-	fmt.Printf("  ret\n")
+	println(".L.return.%s:", fname)
+	println("  mv sp, fp")
+	println("  ld fp, 0(sp)")
+	println("  ld ra, 8(sp)")
+	println("  addi sp, sp, 16")
+	println("  ret")
 }
 
 func (a RiscV) push() {
-	fmt.Printf("  addi sp, sp, -8\n")
-	fmt.Printf("  sd a0, 0(sp)\n")
+	println("  addi sp, sp, -8")
+	println("  sd a0, 0(sp)")
 	depth++
 }
 
 func (a RiscV) pop(arg string) {
-	fmt.Printf("  ld %s, 0(sp)\n", arg)
-	fmt.Printf("  addi sp, sp, 8\n")
+	println("  ld %s, 0(sp)", arg)
+	println("  addi sp, sp, 8")
 	depth--
 }
 
@@ -314,9 +315,9 @@ func (a RiscV) load(ty *Type) {
 	}
 
 	if ty.size == 1 {
-		fmt.Printf("  lb a0, 0(a0)\n")
+		println("  lb a0, 0(a0)")
 	} else {
-		fmt.Printf("  ld a0, 0(a0)\n")
+		println("  ld a0, 0(a0)")
 	}
 }
 
@@ -325,9 +326,9 @@ func (a RiscV) store(ty *Type) {
 	a.pop("a1")
 
 	if ty.size == 1 {
-		fmt.Printf("  sb a0, 0(a1)\n")
+		println("  sb a0, 0(a1)")
 	} else {
-		fmt.Printf("  sd a0, 0(a1)\n")
+		println("  sd a0, 0(a1)")
 	}
 }
 
@@ -337,9 +338,9 @@ func (a RiscV) genAddr(node *Node) {
 	switch node.kind {
 	case ND_VAR:
 		if node.vara.isLocal {
-			fmt.Printf("  addi a0, fp, %d\n", node.vara.offset)
+			println("  addi a0, fp, %d", node.vara.offset)
 		} else {
-			fmt.Printf("  la a0, %s\n", node.vara.name)
+			println("  la a0, %s", node.vara.name)
 		}
 		return
 	case ND_DEREF:
@@ -354,11 +355,11 @@ func (a RiscV) genAddr(node *Node) {
 func (a RiscV) genExpr(node *Node) {
 	switch node.kind {
 	case ND_NUM:
-		fmt.Printf("  li a0, %d\n", node.val)
+		println("  li a0, %d", node.val)
 		return
 	case ND_NEG:
 		a.genExpr(node.lhs)
-		fmt.Printf("  neg a0, a0\n")
+		println("  neg a0, a0")
 		return
 	case ND_VAR:
 		a.genAddr(node)
@@ -394,7 +395,7 @@ func (a RiscV) genExpr(node *Node) {
 			a.pop(argRegR[i])
 		}
 
-		fmt.Printf("  call %s\n", node.funcname)
+		println("  call %s", node.funcname)
 		return
 	}
 
@@ -405,33 +406,33 @@ func (a RiscV) genExpr(node *Node) {
 
 	switch node.kind {
 	case ND_ADD:
-		fmt.Printf("  add a0, a0, a1\n")
+		println("  add a0, a0, a1")
 		return
 	case ND_SUB:
-		fmt.Printf("  sub a0, a0, a1\n")
+		println("  sub a0, a0, a1")
 		return
 	case ND_MUL:
-		fmt.Printf("  mul a0, a0, a1\n")
+		println("  mul a0, a0, a1")
 		return
 	case ND_DIV:
-		fmt.Printf("  div a0, a0, a1\n")
+		println("  div a0, a0, a1")
 		return
 	case ND_EQ, ND_NE:
-		fmt.Printf("  xor a0, a0, a1\n")
+		println("  xor a0, a0, a1")
 
 		if node.kind == ND_EQ {
-			fmt.Printf("  seqz a0, a0\n")
+			println("  seqz a0, a0")
 		} else {
-			fmt.Printf("  snez a0, a0\n")
+			println("  snez a0, a0")
 		}
 
 		return
 	case ND_LT:
-		fmt.Printf("  slt a0, a0, a1\n")
+		println("  slt a0, a0, a1")
 		return
 	case ND_LE:
-		fmt.Printf("  slt a0, a1, a0\n")
-		fmt.Printf("  xori a0, a0, 1\n")
+		println("  slt a0, a1, a0")
+		println("  xori a0, a0, 1")
 		return
 	}
 
@@ -443,31 +444,31 @@ func (a RiscV) genStmt(node *Node) {
 	case ND_IF:
 		c := count()
 		a.genExpr(node.cond)
-		fmt.Printf("  beqz a0, .L.else.%d\n", c)
+		println("  beqz a0, .L.else.%d", c)
 		a.genStmt(node.then)
-		fmt.Printf("  j .L.end.%d\n", c)
-		fmt.Printf(".L.else.%d:\n", c)
+		println("  j .L.end.%d", c)
+		println(".L.else.%d:", c)
 		if node.els != nil {
 			a.genStmt(node.els)
 		}
-		fmt.Printf(".L.end.%d:\n", c)
+		println(".L.end.%d:", c)
 		return
 	case ND_FOR:
 		c := count()
 		if node.init != nil {
 			a.genStmt(node.init)
 		}
-		fmt.Printf(".L.begin.%d:\n", c)
+		println(".L.begin.%d:", c)
 		if node.cond != nil {
 			a.genExpr(node.cond)
-			fmt.Printf("  beqz a0, .L.end.%d\n", c)
+			println("  beqz a0, .L.end.%d", c)
 		}
 		a.genStmt(node.then)
 		if node.inc != nil {
 			a.genExpr(node.inc)
 		}
-		fmt.Printf("  j .L.begin.%d\n", c)
-		fmt.Printf(".L.end.%d:\n", c)
+		println("  j .L.begin.%d", c)
+		println(".L.end.%d:", c)
 		return
 	case ND_BLOCK:
 		for n := node.body; n != nil; n = n.next {
@@ -476,7 +477,7 @@ func (a RiscV) genStmt(node *Node) {
 		return
 	case ND_RETURN:
 		a.genExpr(node.lhs)
-		fmt.Printf("  j .L.return.%s\n", currentGenFn.name)
+		println("  j .L.return.%s", currentGenFn.name)
 		return
 	case ND_EXPR_STMT:
 		a.genExpr(node.lhs)
@@ -500,9 +501,9 @@ func (a RiscV) emitText(prog *Obj) {
 		i := 0
 		for vara := fn.params; vara != nil; vara = vara.next {
 			if vara.ty.size == 1 {
-				fmt.Printf("  sb %s, %d(fp)\n", argRegR[i], vara.offset)
+				println("  sb %s, %d(fp)", argRegR[i], vara.offset)
 			} else {
-				fmt.Printf("  sd %s, %d(fp)\n", argRegR[i], vara.offset)
+				println("  sd %s, %d(fp)", argRegR[i], vara.offset)
 			}
 			i++
 		}
@@ -522,16 +523,16 @@ func emitData(prog *Obj) {
 			continue
 		}
 
-		fmt.Printf("  .data\n")
-		fmt.Printf("  .globl %s\n", vara.name)
-		fmt.Printf("%s:\n", vara.name)
+		println("  .data")
+		println("  .globl %s", vara.name)
+		println("%s:", vara.name)
 
 		if len(vara.initData) > 0 {
 			for i := 0; i < vara.ty.size; i++ {
-				fmt.Printf("  .byte %d\n", vara.initData[i])
+				println("  .byte %d", vara.initData[i])
 			}
 		} else {
-			fmt.Printf("  .zero %d\n", vara.ty.size)
+			println("  .zero %d", vara.ty.size)
 		}
 	}
 }
@@ -571,4 +572,8 @@ func count() int {
 	t := I
 	I++
 	return t
+}
+
+func println(format string, args ...any) {
+	fmt.Fprintf(os.Stdout, format+"\n", args...)
 }
