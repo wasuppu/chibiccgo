@@ -2462,10 +2462,9 @@ func funcall(rest **Token, tok *Token, fn *Node) *Node {
 		}
 
 		if paramty != nil {
-			if paramty.kind == TY_STRUCT || paramty.kind == TY_UNION {
-				failTok(arg.tok, "passing struct or union is not supported yet")
+			if paramty.kind != TY_STRUCT && paramty.kind != TY_UNION {
+				arg = NewCast(arg, paramty)
 			}
-			arg = NewCast(arg, paramty)
 			paramty = paramty.next
 		} else if arg.ty.kind == TY_FLOAT {
 			// If parameter type is omitted (e.g. in "..."), float

@@ -16,6 +16,7 @@ const (
 var ArchName string
 var outputFile *os.File
 var depth int
+var bsDepth int
 var currentGenFn *Obj
 
 var argReg8x = []string{"%dil", "%sil", "%dl", "%cl", "%r8b", "%r9b"}
@@ -388,6 +389,59 @@ func (a X64) cmpZero(ty *Type) {
 	}
 }
 
+// Structs or unions equal or smaller than 16 bytes are passed
+// using up to two registers.
+//
+// If the first 8 bytes contains only floating-point type members,
+// they are passed in an XMM register. Otherwise, they are passed
+// in a general-purpose register.
+//
+// If a struct/union is larger than 8 bytes, the same rule is
+// applied to the the next 8 byte chunk.
+//
+// This function returns true if `ty` has only floating-point
+// members in its byte range [lo, hi).
+func hasFlonum(ty *Type, lo, hi, offset int) bool {
+	if ty.kind == TY_STRUCT || ty.kind == TY_UNION {
+		for mem := ty.members; mem != nil; mem = mem.next {
+			if !hasFlonum(mem.ty, lo, hi, offset+mem.offset) {
+				return false
+			}
+		}
+		return true
+	}
+
+	if ty.kind == TY_ARRAY {
+		for i := 0; i < ty.arrayLen; i++ {
+			if !hasFlonum(ty.base, lo, hi, offset+ty.base.size*i) {
+				return false
+			}
+		}
+		return true
+	}
+
+	return offset < lo || hi < offset || ty.isFlonum()
+}
+
+func hasFlonum1(ty *Type) bool {
+	return hasFlonum(ty, 0, 8, 0)
+}
+
+func hasFlonum2(ty *Type) bool {
+	return hasFlonum(ty, 8, 16, 0)
+}
+
+func (a X64) pushStruct(ty *Type) {
+	sz := alignTo(ty.size, 8)
+	println("  sub $%d, %%rsp", sz)
+	depth += sz / 8
+
+	for i := 0; i < ty.size; i++ {
+		println("  mov %d(%%rax), %%r10b", i)
+		println("  mov %%r10b, %d(%%rsp)", i)
+	}
+}
+
 func (a X64) pushArgs2(args *Node, firstPass bool) {
 	if args == nil {
 		return
@@ -401,9 +455,12 @@ func (a X64) pushArgs2(args *Node, firstPass bool) {
 
 	a.genExpr(args)
 
-	if args.ty.isFlonum() {
+	switch args.ty.kind {
+	case TY_STRUCT, TY_UNION:
+		a.pushStruct(args.ty)
+	case TY_FLOAT, TY_DOUBLE:
 		a.pushf()
-	} else {
+	default:
 		a.push()
 	}
 }
@@ -416,13 +473,43 @@ func (a X64) pushArgs(args *Node) int {
 	stack, gp, fp := 0, 0, 0
 
 	for arg := args; arg != nil; arg = arg.next {
-		if arg.ty.isFlonum() {
+		ty := arg.ty
+
+		switch ty.kind {
+		case TY_STRUCT, TY_UNION:
+			if ty.size > 16 {
+				arg.passByStack = true
+				stack += alignTo(ty.size, 8) / 8
+			} else {
+				fp1b := hasFlonum1(ty)
+				fp2b := hasFlonum2(ty)
+				var fp1, fp2, nfp1, nfp2 int
+				if fp1b {
+					fp1 = 1
+				} else {
+					nfp1 = 1
+				}
+				if fp2b {
+					fp2 = 1
+				} else {
+					nfp2 = 1
+				}
+
+				if fp+fp1+fp2 < FP_MAX_X && gp+nfp1+nfp2 < GP_MAX_X {
+					fp = fp + fp1 + fp2
+					gp = gp + nfp1 + nfp2
+				} else {
+					arg.passByStack = true
+					stack += alignTo(ty.size, 8) / 8
+				}
+			}
+		case TY_FLOAT, TY_DOUBLE:
 			if fp >= FP_MAX_X {
 				arg.passByStack = true
 				stack++
 			}
 			fp++
-		} else {
+		default:
 			if gp >= GP_MAX_X {
 				arg.passByStack = true
 				stack++
@@ -618,12 +705,53 @@ func (a X64) genExpr(node *Node) {
 		a.genExpr(node.lhs)
 		gp, fp := 0, 0
 		for arg := node.args; arg != nil; arg = arg.next {
-			if arg.ty.isFlonum() {
+			ty := arg.ty
+
+			switch ty.kind {
+			case TY_STRUCT, TY_UNION:
+				if ty.size > 16 {
+					continue
+				}
+
+				fp1b := hasFlonum1(ty)
+				fp2b := hasFlonum2(ty)
+				var fp1, fp2, nfp1, nfp2 int
+				if fp1b {
+					fp1 = 1
+				} else {
+					nfp1 = 1
+				}
+				if fp2b {
+					fp2 = 1
+				} else {
+					nfp2 = 1
+				}
+
+				if fp+fp1+fp2 < FP_MAX_X && gp+nfp1+nfp2 < GP_MAX_X {
+					if fp1b {
+						a.popf(fp)
+						fp++
+					} else {
+						a.pop(argReg64x[gp])
+						gp++
+					}
+
+					if ty.size > 8 {
+						if fp2b {
+							a.popf(fp)
+							fp++
+						} else {
+							a.pop(argReg64x[gp])
+							gp++
+						}
+					}
+				}
+			case TY_FLOAT, TY_DOUBLE:
 				if fp < FP_MAX_X {
 					a.popf(fp)
 					fp++
 				}
-			} else {
+			default:
 				if gp < GP_MAX_X {
 					a.pop(argReg64x[gp])
 					gp++
@@ -1204,6 +1332,111 @@ func (a RiscV) cmpZero(ty *Type) {
 	}
 }
 
+func getFloStMemsTy(ty *Type, regsTy []*Type, idx *int) {
+	switch ty.kind {
+	case TY_STRUCT:
+		for mem := ty.members; mem != nil; mem = mem.next {
+			getFloStMemsTy(mem.ty, regsTy, idx)
+		}
+		return
+	case TY_UNION:
+		*idx += 2
+		return
+	case TY_ARRAY:
+		for i := 0; i < ty.arrayLen; i++ {
+			getFloStMemsTy(ty.base, regsTy, idx)
+		}
+		return
+	default:
+		if *idx < 2 {
+			regsTy[*idx] = ty
+		}
+		*idx += 1
+		return
+	}
+}
+
+func setFloStMemsTy(ty **Type, gp, fp int) {
+	t := *ty
+	t.fsReg1Ty = tyVoid
+	t.fsReg2Ty = tyVoid
+
+	if t.kind == TY_UNION {
+		return
+	}
+
+	rty := []*Type{tyVoid, tyVoid}
+	regsTyIdx := 0
+	getFloStMemsTy(t, rty, &regsTyIdx)
+
+	if regsTyIdx > 2 {
+		return
+	}
+
+	if (rty[0].isFlonum() && rty[1] == tyVoid && fp < FP_MAX_R) ||
+		(rty[0].isFlonum() && rty[1].isInteger() && fp < FP_MAX_R && gp < GP_MAX_R) ||
+		(rty[0].isInteger() && rty[1].isFlonum() && fp < FP_MAX_R && gp < GP_MAX_R) ||
+		(rty[0].isFlonum() && rty[1].isFlonum() && fp+1 < FP_MAX_R) {
+		t.fsReg1Ty = rty[0]
+		t.fsReg2Ty = rty[1]
+	}
+}
+
+func createBSSpace(args *Node) int {
+	bsStack := 0
+	for arg := args; arg != nil; arg = arg.next {
+		ty := arg.ty
+		if ty.size > 16 && ty.kind == TY_STRUCT {
+			sz := alignTo(ty.size, 8)
+			println("  addi sp, sp, -%d", sz)
+			println("  mv t6, sp")
+			depth += sz / 8
+			bsStack += sz / 8
+			bsDepth += sz / 8
+		}
+	}
+	return bsStack
+}
+
+func (a RiscV) pushStruct(ty *Type) {
+	if ty.size > 16 {
+		sz := alignTo(ty.size, 8)
+		bsDepth -= sz / 8
+		bsOffset := bsDepth * 8
+
+		for i := range sz {
+			println("  lb t0, %d(a0)", i)
+			println("  sb t0, %d(t6)", bsOffset+i)
+		}
+
+		println("  addi a0, t6, %d", bsOffset)
+		a.push()
+		return
+	}
+
+	if (ty.fsReg1Ty.isFlonum() && ty.fsReg2Ty != tyVoid) || ty.fsReg2Ty.isFlonum() {
+		println("  addi sp, sp, -16")
+		depth += 2
+
+		println("  ld t0, 0(a0)")
+		println("  sd t0, 0(sp)")
+
+		off := max(ty.fsReg1Ty.size, ty.fsReg2Ty.size)
+		println("  ld t0, %d(a0)", off)
+		println("  sd t0, 8(sp)")
+
+		return
+	}
+
+	sz := alignTo(ty.size, 8)
+	println("  addi sp, sp, -%d", sz)
+	depth += sz / 8
+	for i := range ty.size {
+		println("  lb t0, %d(a0)", i)
+		println("  sb t0, %d(sp)", i)
+	}
+}
+
 func (a RiscV) pushArgs2(args *Node, firstPass bool) {
 	if args == nil {
 		return
@@ -1217,9 +1450,12 @@ func (a RiscV) pushArgs2(args *Node, firstPass bool) {
 
 	a.genExpr(args)
 
-	if args.ty.isFlonum() {
+	switch args.ty.kind {
+	case TY_STRUCT, TY_UNION:
+		a.pushStruct(args.ty)
+	case TY_FLOAT, TY_DOUBLE:
 		a.pushf()
-	} else {
+	default:
 		a.push()
 	}
 }
@@ -1232,7 +1468,38 @@ func (a RiscV) pushArgs(args *Node) int {
 	stack, gp, fp := 0, 0, 0
 
 	for arg := args; arg != nil; arg = arg.next {
-		if arg.ty.isFlonum() {
+		ty := arg.ty
+
+		switch ty.kind {
+		case TY_STRUCT, TY_UNION:
+			setFloStMemsTy(&ty, gp, fp)
+			if ty.fsReg1Ty.isFlonum() || ty.fsReg2Ty.isFlonum() {
+				regs := []*Type{ty.fsReg1Ty, ty.fsReg2Ty}
+				for i := range 2 {
+					if regs[i].isFlonum() {
+						fp++
+					}
+					if regs[i].isInteger() {
+						gp++
+					}
+				}
+			}
+
+			var regs int
+			if 8 < ty.size && ty.size <= 16 {
+				regs = 2
+			} else {
+				regs = 1
+			}
+			for i := 1; i <= regs; i++ {
+				if gp < GP_MAX_R {
+					gp++
+				} else {
+					arg.passByStack = true
+					stack++
+				}
+			}
+		case TY_FLOAT, TY_DOUBLE:
 			if fp < FP_MAX_R {
 				fp++
 			} else if gp < GP_MAX_R {
@@ -1241,7 +1508,7 @@ func (a RiscV) pushArgs(args *Node) int {
 				arg.passByStack = true
 				stack++
 			}
-		} else {
+		default:
 			if gp < GP_MAX_R {
 				gp++
 			} else {
@@ -1257,9 +1524,10 @@ func (a RiscV) pushArgs(args *Node) int {
 		stack++
 	}
 
+	bsStack := createBSSpace(args)
 	a.pushArgs2(args, true)
 	a.pushArgs2(args, false)
-	return stack
+	return stack + bsStack
 }
 
 // Compute the absolute address of a given node.
@@ -1455,7 +1723,43 @@ func (a RiscV) genExpr(node *Node) {
 			}
 
 			curArg = curArg.next
-			if arg.ty.isFlonum() {
+			ty := arg.ty
+			switch ty.kind {
+			case TY_STRUCT, TY_UNION:
+				if ty.fsReg1Ty.isFlonum() || ty.fsReg2Ty.isFlonum() {
+					regs := []*Type{ty.fsReg1Ty, ty.fsReg2Ty}
+					for i := range 2 {
+						if regs[i].kind == TY_FLOAT {
+							println("  flw fa%d, 0(sp)", fp)
+							println("  addi sp, sp, 8")
+							fp++
+							depth--
+						}
+						if regs[i].kind == TY_DOUBLE {
+							a.popf(fp)
+							fp++
+						}
+						if regs[i].isInteger() {
+							a.pop(argRegR[gp])
+							gp++
+						}
+					}
+					break
+				}
+
+				var regs int
+				if 8 < ty.size && ty.size <= 16 {
+					regs = 2
+				} else {
+					regs = 1
+				}
+				for i := 1; i <= regs; i++ {
+					if gp < GP_MAX_R {
+						a.pop(argRegR[gp])
+						gp++
+					}
+				}
+			case TY_FLOAT, TY_DOUBLE:
 				if fp < FP_MAX_R {
 					a.popf(fp)
 					fp++
@@ -1463,7 +1767,7 @@ func (a RiscV) genExpr(node *Node) {
 					a.pop(argRegR[gp])
 					gp++
 				}
-			} else {
+			default:
 				if gp < GP_MAX_R {
 					a.pop(argRegR[gp])
 					gp++
@@ -1475,6 +1779,7 @@ func (a RiscV) genExpr(node *Node) {
 		if stackArgs != 0 {
 			depth -= stackArgs
 			println("  addi sp, sp, %d", stackArgs*8)
+			bsDepth = 0
 		}
 
 		// It looks like the most significant 48 or 56 bits in RAX may
