@@ -26,6 +26,7 @@ var optFcommon bool = true
 var optE bool
 var optM bool
 var optMD bool
+var optMMD bool
 var optMP bool
 var optS bool
 var optC bool
@@ -39,6 +40,7 @@ var optMarch string
 var basefile string
 var outfile string
 
+var stdIncludePaths []string
 var ldExtraArgs []string
 var optInclude []string
 var inputPaths []string
@@ -82,6 +84,9 @@ func (a X64) addDefaultIncludePaths(argv0 string) {
 	includePaths = append(includePaths, "/usr/local/include")
 	includePaths = append(includePaths, "/usr/include/x86_64-linux-gnu")
 	includePaths = append(includePaths, "/usr/include")
+
+	// Keep a copy of the standard include paths for -MMD option.
+	stdIncludePaths = append(stdIncludePaths, includePaths...)
 }
 
 func (a RiscV) addDefaultIncludePaths(argv0 string) {
@@ -320,6 +325,12 @@ func parseArgs(args []string) {
 			continue
 		}
 
+		if args[i] == "-MMD" {
+			optMMD = true
+			optMD = true
+			continue
+		}
+
 		if args[i] == "-cc1-input" {
 			i++
 			basefile = args[i]
@@ -486,6 +497,17 @@ func printTokens(tok *Token) {
 	fmt.Fprintf(out, "\n")
 }
 
+func inStdIncludePath(path string) bool {
+	for i := 0; i < len(stdIncludePaths); i++ {
+		dir := stdIncludePaths[i]
+		l := len(dir)
+		if strings.HasPrefix(path, dir) && path[l] == '/' {
+			return true
+		}
+	}
+	return false
+}
+
 // If -M options is given, the compiler write a list of input files to
 // stdout in a format that "make" command can read. This feature is
 // used to automate file dependency management.
@@ -515,11 +537,17 @@ func printDependencies() {
 	files := inputfiles
 
 	for i := 0; files[i] != nil; i++ {
+		if optMMD && inStdIncludePath(files[i].name) {
+			continue
+		}
 		fmt.Fprintf(out, " \\\n  %s", files[i].name)
 	}
 
 	if optMP {
 		for i := 1; files[i] != nil; i++ {
+			if optMMD && inStdIncludePath(files[i].name) {
+				continue
+			}
 			fmt.Fprintf(out, "%s:\n\n", quoteMakefile(files[i].name))
 		}
 	}
