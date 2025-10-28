@@ -256,7 +256,7 @@ func readStringLiteral(start int) *Token {
 	return tok
 }
 
-func readCharLiteral(start, quote int) *Token {
+func readCharLiteral(start, quote int, ty *Type) *Token {
 	p := quote + 1
 	if source[p] == '\x00' {
 		failAt(start, "unclosed char literal")
@@ -276,7 +276,7 @@ func readCharLiteral(start, quote int) *Token {
 
 	tok := NewToken(TK_NUM, start, p+end-start+1, source[start:p+end+1])
 	tok.val = int64(c)
-	tok.ty = tyInt
+	tok.ty = ty
 	return tok
 }
 
@@ -537,16 +537,25 @@ func tokenize(file *File) *Token {
 
 		// Character literal
 		if input[p] == '\'' {
-			cur.next = readCharLiteral(p, p)
+			cur.next = readCharLiteral(p, p, tyInt)
 			cur.val = int64(int8(cur.val))
 			cur = cur.next
 			p += cur.len
 			continue
 		}
 
+		// UTF-16 character literal
+		if strings.HasPrefix(input[p:], "u'") {
+			cur.next = readCharLiteral(p, p+1, tyUShort)
+			cur = cur.next
+			cur.val &= 0xffff
+			p += cur.len
+			continue
+		}
+
 		// Wide character literal
 		if strings.HasPrefix(input[p:], "L'") {
-			cur.next = readCharLiteral(p, p+1)
+			cur.next = readCharLiteral(p, p+1, tyInt)
 			cur = cur.next
 			p = cur.loc + cur.len
 			continue
