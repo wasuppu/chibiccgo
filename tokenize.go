@@ -671,6 +671,61 @@ func removeBackSlashNewline(p []byte) []byte {
 	return p[:j+1]
 }
 
+func readUniversalChar(p []byte, len int) uint32 {
+	c := uint32(0)
+	for i := range len {
+		if !isXDigit(p[i]) {
+			return 0
+		}
+		c = (c << 4) | uint32(fromHex((p[i])))
+	}
+	return c
+}
+
+// Replace \u or \U escape sequences with corresponding UTF-8 bytes.
+func convertUniversalChars(p []byte) []byte {
+	q := p
+	pi, qi := 0, 0
+
+	for p[pi] != '\x00' {
+		if strings.HasPrefix(string(p[pi:]), "\\u") {
+			c := readUniversalChar(p[pi+2:], 4)
+			if c != 0 {
+				pi += 6
+				qi += encodeUtf8(q[qi:], c)
+			} else {
+				q[qi] = p[pi]
+				qi++
+				pi++
+			}
+		} else if strings.HasPrefix(string(p[pi:]), "\\U") {
+			c := readUniversalChar(p[pi+2:], 8)
+			if c != 0 {
+				pi += 10
+				qi += encodeUtf8(q[qi:], c)
+			} else {
+				q[qi] = p[pi]
+				qi++
+				pi++
+			}
+		} else if p[pi] == '\\' {
+			q[qi] = p[pi]
+			qi++
+			pi++
+			q[qi] = p[pi]
+			qi++
+			pi++
+		} else {
+			q[qi] = p[pi]
+			qi++
+			pi++
+		}
+	}
+
+	q[qi] = '\x00'
+	return q[:qi+1]
+}
+
 var fileno int
 
 func tokenizeFile(path string) *Token {
@@ -682,6 +737,7 @@ func tokenizeFile(path string) *Token {
 
 	cs := canonicalizeNewline([]byte(p + "\x00"))
 	cs = removeBackSlashNewline(cs)
+	cs = convertUniversalChars(cs)
 
 	// Save the filename for assembler .file directive.
 	file := newFile(path, fileno+1, string(cs))
