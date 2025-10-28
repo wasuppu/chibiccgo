@@ -893,6 +893,14 @@ func initializer2(rest **Token, tok *Token, init *Initializer) {
 		return
 	}
 
+	if tok.equal("{") {
+		// An initializer for a scalar variable can be surrounded by
+		// braces. E.g. `int x = {3};`. Handle that case.
+		initializer2(&tok, tok.next, init)
+		*rest = tok.skip("}")
+		return
+	}
+
 	init.expr = assign(rest, tok)
 }
 
