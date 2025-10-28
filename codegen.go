@@ -382,6 +382,18 @@ func (a X64) genExpr(node *Node) {
 
 		println("  movzb %%al, %%rax")
 		return
+	case ND_SHL:
+		println("  mov %%rdi, %%rcx")
+		println("  shl %%cl, %s", ax)
+		return
+	case ND_SHR:
+		println("  mov %%rdi, %%rcx")
+		if node.ty.size == 8 {
+			println("  sar %%cl, %s", ax)
+		} else {
+			println("  sar %%cl, %s", ax)
+		}
+		return
 	}
 
 	failTok(node.tok, "invalid expression")
@@ -794,6 +806,12 @@ func (a RiscV) genExpr(node *Node) {
 	case ND_LE:
 		println("  slt a0, a1, a0")
 		println("  xori a0, a0, 1")
+		return
+	case ND_SHL:
+		println("  sll%s a0, a0, a1", suffix)
+		return
+	case ND_SHR:
+		println("  sra%s a0, a0, a1", suffix)
 		return
 	}
 

@@ -71,6 +71,8 @@ const (
 	ND_BITAND                    // &
 	ND_BITOR                     // |
 	ND_BITXOR                    // ^
+	ND_SHL                       // <<
+	ND_SHR                       // >>
 	ND_EQ                        // ==
 	ND_NE                        // !=
 	ND_LT                        // <
@@ -948,6 +950,7 @@ func toAssign(binary *Node) *Node {
 
 // assign    = logor (assign-op assign)?
 // assign-op = "=" | "+=" | "-=" | "*=" | "/=" | "%=" | "&=" | "|=" | "^="
+// | "<<=" | ">>="
 func assign(rest **Token, tok *Token) *Node {
 	node := logor(&tok, tok)
 
@@ -985,6 +988,14 @@ func assign(rest **Token, tok *Token) *Node {
 
 	if tok.equal("^=") {
 		return toAssign(NewBinary(ND_BITXOR, node, assign(rest, tok.next), tok))
+	}
+
+	if tok.equal("<<=") {
+		return toAssign(NewBinary(ND_SHL, node, assign(rest, tok.next), tok))
+	}
+
+	if tok.equal(">>=") {
+		return toAssign(NewBinary(ND_SHR, node, assign(rest, tok.next), tok))
 	}
 
 	*rest = tok
@@ -1068,30 +1079,52 @@ func equality(rest **Token, tok *Token) *Node {
 	}
 }
 
-// relational = add ("<" add | "<=" add | ">" add | ">=" add)*
+// relational = shift ("<" shift | "<=" shift | ">" shift | ">=" shift)*
 func relational(rest **Token, tok *Token) *Node {
-	node := add(&tok, tok)
+	node := shift(&tok, tok)
 
 	for {
 		start := tok
 
 		if tok.equal("<") {
-			node = NewBinary(ND_LT, node, add(&tok, tok.next), start)
+			node = NewBinary(ND_LT, node, shift(&tok, tok.next), start)
 			continue
 		}
 
 		if tok.equal("<=") {
-			node = NewBinary(ND_LE, node, add(&tok, tok.next), start)
+			node = NewBinary(ND_LE, node, shift(&tok, tok.next), start)
 			continue
 		}
 
 		if tok.equal(">") {
-			node = NewBinary(ND_LT, add(&tok, tok.next), node, start)
+			node = NewBinary(ND_LT, shift(&tok, tok.next), node, start)
 			continue
 		}
 
 		if tok.equal(">=") {
-			node = NewBinary(ND_LE, add(&tok, tok.next), node, start)
+			node = NewBinary(ND_LE, shift(&tok, tok.next), node, start)
+			continue
+		}
+
+		*rest = tok
+		return node
+	}
+}
+
+// shift = add ("<<" add | ">>" add)*
+func shift(rest **Token, tok *Token) *Node {
+	node := add(&tok, tok)
+
+	for {
+		start := tok
+
+		if tok.equal("<<") {
+			node = NewBinary(ND_SHL, node, add(&tok, tok.next), start)
+			continue
+		}
+
+		if tok.equal(">>") {
+			node = NewBinary(ND_SHR, node, add(&tok, tok.next), start)
 			continue
 		}
 
