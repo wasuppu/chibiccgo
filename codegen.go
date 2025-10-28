@@ -210,22 +210,35 @@ func (a X64) genExpr(node *Node) {
 	a.genExpr(node.lhs)
 	a.pop("%rdi")
 
+	var ax, di string
+	if node.lhs.ty.kind == TY_LONG || node.lhs.ty.base != nil {
+		ax = "%rax"
+		di = "%rdi"
+	} else {
+		ax = "%eax"
+		di = "%edi"
+	}
+
 	switch node.kind {
 	case ND_ADD:
-		println("  add %%rdi, %%rax")
+		println("  add %s, %s", di, ax)
 		return
 	case ND_SUB:
-		println("  sub %%rdi, %%rax")
+		println("  sub %s, %s", di, ax)
 		return
 	case ND_MUL:
-		println("  imul %%rdi, %%rax")
+		println("  imul %s, %s", di, ax)
 		return
 	case ND_DIV:
-		println("  cqo")
-		println("  idiv %%rdi")
+		if node.lhs.ty.size == 8 {
+			println("  cqo")
+		} else {
+			println("  cdq")
+		}
+		println("  idiv %s", di)
 		return
 	case ND_EQ, ND_NE, ND_LT, ND_LE:
-		println("  cmp %%rdi, %%rax")
+		println("  cmp %s, %s", di, ax)
 
 		switch node.kind {
 		case ND_EQ:
@@ -462,7 +475,11 @@ func (a RiscV) genExpr(node *Node) {
 		return
 	case ND_NEG:
 		a.genExpr(node.lhs)
-		println("  neg a0, a0")
+		if node.ty.size <= 4 {
+			println("  neg%s a0, a0", "w")
+		} else {
+			println("  neg a0, a0")
+		}
 		return
 	case ND_VAR, ND_MEMBER:
 		a.genAddr(node)
@@ -511,18 +528,22 @@ func (a RiscV) genExpr(node *Node) {
 	a.genExpr(node.lhs)
 	a.pop("a1")
 
+	suffix := "w"
+	if node.lhs.ty.kind == TY_LONG || node.lhs.ty.base != nil {
+		suffix = ""
+	}
 	switch node.kind {
 	case ND_ADD:
-		println("  add a0, a0, a1")
+		println("  add%s a0, a0, a1", suffix)
 		return
 	case ND_SUB:
-		println("  sub a0, a0, a1")
+		println("  sub%s a0, a0, a1", suffix)
 		return
 	case ND_MUL:
-		println("  mul a0, a0, a1")
+		println("  mul%s a0, a0, a1", suffix)
 		return
 	case ND_DIV:
-		println("  div a0, a0, a1")
+		println("  div%s a0, a0, a1", suffix)
 		return
 	case ND_EQ, ND_NE:
 		println("  xor a0, a0, a1")
