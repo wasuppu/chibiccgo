@@ -63,6 +63,7 @@ type Type struct {
 	// Struct
 	members    *Member
 	isFlexible bool
+	isPacked   bool
 	fsReg1Ty   *Type // corresponding registers of riscv floating-point structure
 	fsReg2Ty   *Type
 

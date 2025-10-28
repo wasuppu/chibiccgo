@@ -2902,8 +2902,27 @@ func structMembers(rest **Token, tok *Token, ty *Type) {
 	ty.members = head.next
 }
 
-// struct-union-decl = ident? ("{" struct-members)?
+// attribute = ("__attribute__" "(" "(" "packed" ")" ")")?
+func attribute(tok *Token, ty *Type) *Token {
+	if !tok.equal("__attribute__") {
+		return tok
+	}
+
+	tok = tok.next
+	tok = tok.skip("(")
+	tok = tok.skip("(")
+	tok = tok.skip("packed")
+	tok = tok.skip(")")
+	tok = tok.skip(")")
+	ty.isPacked = true
+	return tok
+}
+
+// struct-union-decl = attribute? ident? ("{" struct-members)?
 func structUnionDecl(rest **Token, tok *Token) *Type {
+	ty := structType()
+	tok = attribute(tok, ty)
+
 	// Read a tag.
 	var tag *Token
 	if tok.kind == TK_IDENT {
@@ -2914,12 +2933,11 @@ func structUnionDecl(rest **Token, tok *Token) *Type {
 	if tag != nil && !tok.equal("{") {
 		*rest = tok
 
-		ty := findTag(tag)
-		if ty != nil {
-			return ty
+		ty2 := findTag(tag)
+		if ty2 != nil {
+			return ty2
 		}
 
-		ty = structType()
 		ty.size = -1
 		pushTagScope(tag, ty)
 		return ty
@@ -2928,8 +2946,8 @@ func structUnionDecl(rest **Token, tok *Token) *Type {
 	tok = tok.skip("{")
 
 	// Construct a struct object.
-	ty := structType()
-	structMembers(rest, tok, ty)
+	structMembers(&tok, tok, ty)
+	*rest = attribute(tok, ty)
 
 	if tag != nil {
 		// If this is a redefinition, overwrite a previous type.
@@ -2973,12 +2991,14 @@ func structDecl(rest **Token, tok *Token) *Type {
 			mem.bitOffset = bits % (sz * 8)
 			bits += mem.bitWidth
 		} else {
-			bits = alignTo(bits, mem.align*8)
+			if !ty.isPacked {
+				bits = alignTo(bits, mem.align*8)
+			}
 			mem.offset = bits / 8
 			bits += mem.ty.size * 8
 		}
 
-		if ty.align < mem.align {
+		if !ty.isPacked && ty.align < mem.align {
 			ty.align = mem.align
 		}
 	}

@@ -31,6 +31,7 @@ var kws = []string{
 	"unsigned", "const", "volatile", "auto", "register", "restrict",
 	"__restrict", "__restrict__", "_Noreturn", "float", "double",
 	"typeof", "asm", "_Thread_local", "__thread", "_Atomic",
+	"__attribute__",
 }
 
 var puncts = []string{
