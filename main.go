@@ -150,6 +150,17 @@ func parseArgs(args []string) {
 			continue
 		}
 
+		if args[i] == "-U" {
+			i++
+			undefMacro(args[i])
+			continue
+		}
+
+		if strings.HasPrefix(args[i], "-U") {
+			undefMacro(args[i][2:])
+			continue
+		}
+
 		if args[i] == "-cc1-input" {
 			i++
 			basefile = args[i]
