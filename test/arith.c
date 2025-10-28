@@ -134,6 +134,11 @@ int main() {
   // c134
   ASSERT(1, (void *)0xffffffffffffffff > (void *)0);
 
+  // c258
+  ASSERT(3, 3?:5);
+  ASSERT(5, 0?:5);
+  ASSERT(4, ({ int i = 3; ++i?:10; }));
+
   printf("OK\n");
   return 0;
 }

@@ -2167,13 +2167,25 @@ func assign(rest **Token, tok *Token) *Node {
 	return node
 }
 
-// conditional = logor ("?" expr ":" conditional)?
+// conditional = logor ("?" expr? ":" conditional)?
 func conditional(rest **Token, tok *Token) *Node {
 	cond := logor(&tok, tok)
 
 	if !tok.equal("?") {
 		*rest = tok
 		return cond
+	}
+
+	if tok.next.equal(":") {
+		// [GNU] Compile `a ?: b` as `tmp = a, tmp ? tmp : b`.
+		cond.addType()
+		vara := NewLVar("", cond.ty)
+		lhs := NewBinary(ND_ASSIGN, NewVarNode(vara, tok), cond, tok)
+		rhs := NewNode(ND_COND, tok)
+		rhs.cond = NewVarNode(vara, tok)
+		rhs.then = NewVarNode(vara, tok)
+		rhs.els = conditional(rest, tok.next.next)
+		return NewBinary(ND_COMMA, lhs, rhs, tok)
 	}
 
 	node := NewNode(ND_COND, tok)
