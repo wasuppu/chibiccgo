@@ -340,5 +340,8 @@ func (node *Node) addType() {
 		}
 		failTok(node.tok, "statement expression returning void is not supported")
 		return
+	case ND_LABEL_VAL:
+		node.ty = pointerTo(tyVoid)
+		return
 	}
 }

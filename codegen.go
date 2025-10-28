@@ -1083,6 +1083,9 @@ func (a X64) genExpr(node *Node) {
 		}
 
 		return
+	case ND_LABEL_VAL:
+		println("  lea %s(%%rip), %%rax", node.uniqueLabel)
+		return
 	}
 
 	switch node.lhs.ty.kind {
@@ -1359,6 +1362,10 @@ func (a X64) genStmt(node *Node) {
 		return
 	case ND_GOTO:
 		println("  jmp %s", node.uniqueLabel)
+		return
+	case ND_GOTO_EXPR:
+		a.genExpr(node.lhs)
+		println("  jmp *%%rax")
 		return
 	case ND_LABEL:
 		println("%s:", node.uniqueLabel)

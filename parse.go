@@ -166,7 +166,9 @@ const (
 	ND_CASE                      // "case"
 	ND_BLOCK                     // { ... }
 	ND_GOTO                      // "goto"
+	ND_GOTO_EXPR                 // "goto" labels-as-values
 	ND_LABEL                     // Labeled statement
+	ND_LABEL_VAL                 // [GNU] Labels-as-values
 	ND_FUNCALL                   // Function call
 	ND_EXPR_STMT                 // Expression statement
 	ND_STMT_EXPR                 // Statement expression
@@ -211,7 +213,7 @@ type Node struct {
 	passByStack bool
 	retBuffer   *Obj
 
-	// Goto or labeled statement
+	// Goto or labeled statement, or labels-as-values
 	label       string
 	uniqueLabel string
 	gotoNext    *Node
@@ -1700,7 +1702,7 @@ func asmStmt(rest **Token, tok *Token) *Node {
 // | "while" "(" expr ")" stmt
 // | "do" stmt "while" "(" expr ")" ";"
 // | "asm" asm-stmt
-// | "goto" ident ";"
+// | "goto" (ident | "*" expr) ";"
 // | "break" ";"
 // | "continue" ";"
 // | ident ":" stmt
@@ -1886,6 +1888,14 @@ func stmt(rest **Token, tok *Token) *Node {
 	}
 
 	if tok.equal("goto") {
+		if tok.next.equal("*") {
+			// [GNU] `goto *ptr` jumps to the address specified by `ptr`.
+			node := NewNode(ND_GOTO_EXPR, tok)
+			node.lhs = expr(&tok, tok.next.next)
+			*rest = tok.skip(";")
+			return node
+		}
+
 		node := NewNode(ND_GOTO, tok)
 		node.label = getIdent(tok.next)
 		node.gotoNext = gotos
@@ -2684,6 +2694,7 @@ func cast(rest **Token, tok *Token) *Node {
 
 // unary = ("+" | "-" | "*" | "&" | "!" | "~") cast
 // | ("++" | "--") unary
+// | "&&" ident
 // | postfix
 func unary(rest **Token, tok *Token) *Node {
 	if tok.equal("+") {
@@ -2732,6 +2743,16 @@ func unary(rest **Token, tok *Token) *Node {
 	// Read --i as i-=1
 	if tok.equal("--") {
 		return toAssign(newSub(unary(rest, tok.next), NewNum(1, tok), tok))
+	}
+
+	// [GNU] labels-as-values
+	if tok.equal("&&") {
+		node := NewNode(ND_LABEL_VAL, tok)
+		node.label = getIdent(tok.next)
+		node.gotoNext = gotos
+		gotos = node
+		*rest = tok.next.next
+		return node
 	}
 
 	return postfix(rest, tok)
@@ -3342,7 +3363,7 @@ func createParamLvars(param *Type) {
 	}
 }
 
-// This function matches gotos with labels.
+// This function matches gotos or labels-as-values with labels.
 
 // We cannot resolve gotos as we parse a function because gotos
 // can refer a label that appears later in the function.
