@@ -5,6 +5,8 @@ import (
 )
 
 var depth int
+var x64ArgReg = []string{"%rdi", "%rsi", "%rdx", "%rcx", "%r8", "%r9"}
+var argRegR = []string{"a0", "a1", "a2", "a3", "a4", "a5"}
 
 func chooseArch(arch string) Arch {
 	var target Arch
@@ -97,6 +99,17 @@ func (a X64) genExpr(node *Node) {
 		fmt.Printf("  mov %%rax, (%%rdi)\n")
 		return
 	case ND_FUNCALL:
+		nargs := 0
+		for arg := node.args; arg != nil; arg = arg.next {
+			a.genExpr(arg)
+			a.push()
+			nargs++
+		}
+
+		for i := nargs - 1; i >= 0; i-- {
+			a.pop(x64ArgReg[i])
+		}
+
 		fmt.Printf("  mov $0, %%rax\n")
 		fmt.Printf("  call %s\n", node.funcname)
 		return
@@ -271,6 +284,17 @@ func (a RiscV) genExpr(node *Node) {
 		fmt.Printf("  sd a0, 0(a1)\n")
 		return
 	case ND_FUNCALL:
+		nargs := 0
+		for arg := node.args; arg != nil; arg = arg.next {
+			a.genExpr(arg)
+			a.push()
+			nargs++
+		}
+
+		for i := nargs - 1; i >= 0; i-- {
+			a.pop(argRegR[i])
+		}
+
 		fmt.Printf("  call %s\n", node.funcname)
 		return
 	}

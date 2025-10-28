@@ -67,6 +67,7 @@ type Node struct {
 
 	// Function call
 	funcname string
+	args     *Node
 
 	vara *Obj // Used if kind == ND_VAR
 	val  int  // Used if kind == ND_NUM
@@ -480,8 +481,31 @@ func unary(rest **Token, tok *Token) *Node {
 	return primary(rest, tok)
 }
 
-// primary = "(" expr ")" | ident args? | num
-// args = "(" ")"
+// funcall = ident "(" (assign ("," assign)*)? ")"
+func funcall(rest **Token, tok *Token) *Node {
+	start := tok
+	tok = tok.next.next
+
+	head := Node{}
+	cur := &head
+
+	for !tok.equal(")") {
+		if cur != &head {
+			tok = tok.skip(",")
+		}
+		cur.next = assign(&tok, tok)
+		cur = cur.next
+	}
+
+	*rest = tok.skip(")")
+
+	node := NewNode(ND_FUNCALL, start)
+	node.funcname = start.lexeme
+	node.args = head.next
+	return node
+}
+
+// primary = "(" expr ")" | ident func-args? | num
 func primary(rest **Token, tok *Token) *Node {
 	if tok.equal("(") {
 		node := expr(&tok, tok.next)
@@ -492,10 +516,7 @@ func primary(rest **Token, tok *Token) *Node {
 	if tok.kind == TK_IDENT {
 		// Function call
 		if tok.next.equal("(") {
-			node := NewNode(ND_FUNCALL, tok)
-			node.funcname = tok.lexeme
-			*rest = tok.next.next.skip(")")
-			return node
+			return funcall(rest, tok)
 		}
 
 		// Variable
