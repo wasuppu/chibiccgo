@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -309,9 +311,18 @@ func cc1(target Arch) {
 
 	prog := parse(tok)
 
+	// Open a temporary output buffer.
+	var outputBuf bytes.Buffer
+
 	// Traverse the AST to emit assembly.
+	codegen(target, prog, &outputBuf)
+
+	// Write the asembly text to a file.
 	out := openFile(outfile)
-	codegen(target, prog, out)
+	defer out.Close()
+	if _, err := io.Copy(out, &outputBuf); err != nil {
+		fail(fmt.Sprintf("fail to write buf to file %s:%s", outfile, err))
+	}
 }
 
 func (a X64) assemble(input, output string) {

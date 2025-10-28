@@ -2,8 +2,8 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"math"
-	"os"
 )
 
 const (
@@ -14,7 +14,7 @@ const (
 )
 
 var ArchName string
-var outputFile *os.File
+var outputFile io.Writer
 var depth int
 var bsDepth int
 var currentGenFn *Obj
@@ -2587,7 +2587,7 @@ func simpleLog2(num int) int {
 	return e
 }
 
-func codegen(target Arch, prog *Obj, out *os.File) {
+func codegen(target Arch, prog *Obj, out io.Writer) {
 	outputFile = out
 
 	files := inputfiles
