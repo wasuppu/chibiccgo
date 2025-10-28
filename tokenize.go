@@ -98,18 +98,65 @@ func isKeyword(tok *Token) bool {
 	return slices.ContainsFunc(kws, tok.equal)
 }
 
-func readStringLiteral(start int) *Token {
-	p := start + 1
+func readEscapedChar(p int) byte {
+	switch source[p] {
+	case 'a':
+		return '\a'
+	case 'b':
+		return '\b'
+	case 't':
+		return '\t'
+	case 'n':
+		return '\n'
+	case 'v':
+		return '\v'
+	case 'f':
+		return '\f'
+	case 'r':
+		return '\r'
+	// [GNU] \e for the ASCII escape character is a GNU C extension.
+	case 'e':
+		return 27
+	default:
+		return source[p]
+	}
+}
+
+// Find a closing double-quote.
+func stringLiteralEnd(p int) int {
+	start := p
 	sourceLen := len(source)
 	for ; source[p] != '"'; p++ {
 		if source[p] == '\n' || p == sourceLen {
 			failAt(start, "unclosed string literal")
 		}
+		if source[p] == '\\' {
+			p++
+		}
+	}
+	return p
+}
+
+func readStringLiteral(start int) *Token {
+	end := stringLiteralEnd(start + 1)
+	buf := make([]byte, end-start)
+	len := 0
+
+	for p := start + 1; p < end; {
+		if source[p] == '\\' {
+			buf[len] = readEscapedChar(p + 1)
+			len++
+			p += 2
+		} else {
+			buf[len] = source[p]
+			len++
+			p++
+		}
 	}
 
-	tok := NewToken(TK_STR, start, p+1-start, source[start:p+1])
-	tok.ty = arrayOf(tyChar, p-start)
-	tok.str = fmt.Sprintf("%s\x00", source[start+1:p])
+	tok := NewToken(TK_STR, start, end+1-start, source[start:end+1])
+	tok.ty = arrayOf(tyChar, len+1)
+	tok.str = fmt.Sprintf("%s\x00", buf)
 	return tok
 }
 
