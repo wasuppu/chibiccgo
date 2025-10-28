@@ -172,7 +172,7 @@ func funcParams(rest **Token, tok *Token, ty *Type) *Type {
 }
 
 // type-suffix = "(" func-params
-// | "[" num "]"
+// | "[" num "]" type-suffix
 // | ε
 func typeSuffix(rest **Token, tok *Token, ty *Type) *Type {
 	if tok.equal("(") {
@@ -181,7 +181,8 @@ func typeSuffix(rest **Token, tok *Token, ty *Type) *Type {
 
 	if tok.equal("[") {
 		sz := getNumber(tok.next)
-		*rest = tok.next.next.skip("]")
+		tok = tok.next.next.skip("]")
+		ty = typeSuffix(rest, tok, ty)
 		return arrayOf(ty, sz)
 	}
 
