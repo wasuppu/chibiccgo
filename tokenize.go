@@ -542,6 +542,18 @@ func addLineNumbers(tok *Token) {
 	}
 }
 
+func tokenizeStringLiteral(tok *Token, basety *Type) *Token {
+	source = tok.file.contents
+	var t *Token
+	if basety.size == 2 {
+		t = readUtf16StringLiteral(tok.loc, tok.loc)
+	} else {
+		t = readUtf32StringLiteral(tok.loc, tok.loc, basety)
+	}
+	t.next = tok.next
+	return t
+}
+
 // Tokenize a given string and returns new tokens.
 func tokenize(file *File) *Token {
 	currentFile = file
