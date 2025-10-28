@@ -3520,14 +3520,32 @@ func function(tok *Token, basety *Type, attr *VarAttr) *Token {
 		failTok(ty.namePos, "function name omitted")
 	}
 
-	fn := NewGVar(getIdent(ty.name), ty)
-	fn.isFunction = true
-	fn.isDefinition = !consume(&tok, tok, ";")
-	fn.isStatic = attr.isStatic || (attr.isInline && !attr.isExtern)
-	fn.isInline = attr.isInline
+	nameStr := getIdent(ty.name)
+
+	fn := findFunc(nameStr)
+	if fn != nil {
+		// Redeclaration
+		if !fn.isFunction {
+			failTok(tok, "redeclared as a different kind of symbol")
+		}
+		if fn.isDefinition && tok.equal("{") {
+			failTok(tok, "redefinition of %s", nameStr)
+		}
+		if !fn.isStatic && attr.isStatic {
+			failTok(tok, "static declaration follows a non-static declaration")
+		}
+		fn.isDefinition = fn.isDefinition || tok.equal("{")
+	} else {
+		fn = NewGVar(nameStr, ty)
+		fn.isFunction = true
+		fn.isDefinition = tok.equal("{")
+		fn.isStatic = attr.isStatic || (attr.isInline && !attr.isExtern)
+		fn.isInline = attr.isInline
+	}
+
 	fn.isRoot = !(fn.isStatic && fn.isInline)
 
-	if !fn.isDefinition {
+	if consume(&tok, tok, ";") {
 		return tok
 	}
 
