@@ -142,6 +142,22 @@ func (a X64) genStmt(node *Node) {
 		}
 		fmt.Printf(".L.end.%d:\n", c)
 		return
+	case ND_FOR:
+		c := count()
+		a.genStmt(node.init)
+		fmt.Printf(".L.begin.%d:\n", c)
+		if node.cond != nil {
+			a.genExpr(node.cond)
+			fmt.Printf("  cmp $0, %%rax\n")
+			fmt.Printf("  je  .L.end.%d\n", c)
+		}
+		a.genStmt(node.then)
+		if node.inc != nil {
+			a.genExpr(node.inc)
+		}
+		fmt.Printf("  jmp .L.begin.%d\n", c)
+		fmt.Printf(".L.end.%d:\n", c)
+		return
 	case ND_BLOCK:
 		for n := node.body; n != nil; n = n.next {
 			a.genStmt(n)
@@ -278,6 +294,21 @@ func (a RiscV) genStmt(node *Node) {
 		if node.els != nil {
 			a.genStmt(node.els)
 		}
+		fmt.Printf(".L.end.%d:\n", c)
+		return
+	case ND_FOR:
+		c := count()
+		a.genStmt(node.init)
+		fmt.Printf(".L.begin.%d:\n", c)
+		if node.cond != nil {
+			a.genExpr(node.cond)
+			fmt.Printf("  beqz a0, .L.end.%d\n", c)
+		}
+		a.genStmt(node.then)
+		if node.inc != nil {
+			a.genExpr(node.inc)
+		}
+		fmt.Printf("  j .L.begin.%d\n", c)
 		fmt.Printf(".L.end.%d:\n", c)
 		return
 	case ND_BLOCK:

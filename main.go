@@ -11,8 +11,8 @@ func main() {
 
 	// Tokenize and parse.
 	tok := tokenize(os.Args[2])
-	node := parse(tok)
+	prog := parse(tok)
 
 	// Traverse the AST to emit assembly.
-	codegen(os.Args[1], node)
+	codegen(os.Args[1], prog)
 }
