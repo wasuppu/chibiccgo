@@ -121,14 +121,23 @@ func consume(rest **Token, tok *Token, str string) bool {
 	return false
 }
 
-// Returns true if c is valid as the first character of an identifier.
-func isIdent1(c byte) bool {
-	return ('a' <= c && c <= 'z') || ('A' <= c && c <= 'Z') || c == '_'
-}
+// Read an identifier and returns the length of it.
+// If p does not point to a valid identifier, 0 is returned.
+func readIdent(start int) int {
+	p := start
+	c := decodeUtf8(&p, p)
+	if !isIdent1(c) {
+		return 0
+	}
 
-// Returns true if c is valid as a non-first character of an identifier.
-func isIdent2(c byte) bool {
-	return isIdent1(c) || ('0' <= c && c <= '9')
+	for {
+		var q int
+		c = decodeUtf8(&q, p)
+		if !isIdent2(c) {
+			return p - start
+		}
+		p = q
+	}
 }
 
 func fromHex(c byte) int {
@@ -678,16 +687,11 @@ func tokenize(file *File) *Token {
 		}
 
 		// Identifier or keyword
-		if isIdent1(input[p]) {
-			start := p
-			for {
-				p++
-				if !isIdent2(input[p]) {
-					break
-				}
-			}
-			cur.next = NewToken(TK_IDENT, start, p-start, input[start:p])
+		identLen := readIdent(p)
+		if identLen != 0 {
+			cur.next = NewToken(TK_IDENT, p, identLen, source[p:p+identLen])
 			cur = cur.next
+			p += cur.len
 			continue
 		}
 
