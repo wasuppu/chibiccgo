@@ -666,6 +666,13 @@ func (a X64) genAddr(node *Node) {
 			return
 		}
 
+		// Thread-local variable
+		if node.vara.isTls {
+			println("  mov %%fs:0, %%rax")
+			println("  add $%s@tpoff, %%rax", node.vara.name)
+			return
+		}
+
 		// Function
 		if node.ty.kind == TY_FUNC {
 			if node.vara.isDefinition {
@@ -1360,13 +1367,20 @@ func (a X64) emitData(prog *Obj) {
 		}
 		println("  .align %d", align)
 
+		// Common symbol
 		if optFcommon && vara.isTentative {
 			println("  .comm %s, %d, %d", vara.name, vara.ty.size, align)
 			continue
 		}
 
+		// .data or .tdata
 		if len(vara.initData) > 0 {
-			println("  .data")
+			if vara.isTls {
+				println("  .section .tdata,\"awT\",@progbits")
+			} else {
+				println("  .data")
+			}
+
 			println("%s:", vara.name)
 
 			rel := vara.rel
@@ -1384,7 +1398,13 @@ func (a X64) emitData(prog *Obj) {
 			continue
 		}
 
-		println("  .bss")
+		// .bss or .tbss
+		if vara.isTls {
+			println("  .section .tbss,\"awT\",@nobits")
+		} else {
+			println("  .bss")
+		}
+
 		println("%s:", vara.name)
 		println("  .zero %d", vara.ty.size)
 	}

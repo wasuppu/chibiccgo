@@ -97,6 +97,7 @@ type Obj struct {
 
 	// Global variable
 	isTentative bool
+	isTls       bool
 	initData    string
 	rel         *Relocation
 
@@ -250,6 +251,7 @@ type VarAttr struct {
 	isStatic  bool
 	isExtern  bool
 	isInline  bool
+	isTls     bool
 	align     int
 }
 
@@ -492,6 +494,7 @@ const (
 
 // declspec = ("void" | "_Bool" | "char" | "short" | "int" | "long"
 // | "typedef" | "static" | "extern" | "inline"
+// | "_Thread_local" | "__thread"
 // | "signed" | "unsigned"
 // | struct-decl | union-decl | typedef-name
 // | enum-specifier | typeof-specifier
@@ -504,7 +507,7 @@ func declspec(rest **Token, tok *Token, attr *VarAttr) *Type {
 	for isTypename(tok) {
 		// Handle storage class specifiers.
 		if tok.equal("typedef") || tok.equal("static") || tok.equal("extern") ||
-			tok.equal("inline") {
+			tok.equal("inline") || tok.equal("_Thread_local") || tok.equal("__thread") {
 			if attr == nil {
 				failTok(tok, "storage class specifier is not allowed in this context")
 			}
@@ -515,11 +518,13 @@ func declspec(rest **Token, tok *Token, attr *VarAttr) *Type {
 				attr.isStatic = true
 			} else if tok.equal("extern") {
 				attr.isExtern = true
-			} else {
+			} else if tok.equal("inline") {
 				attr.isInline = true
+			} else {
+				attr.isTls = true
 			}
 
-			var isStatic, isExtern, isInline int
+			var isStatic, isExtern, isInline, isTls int
 			if attr.isStatic {
 				isStatic = 1
 			}
@@ -529,8 +534,12 @@ func declspec(rest **Token, tok *Token, attr *VarAttr) *Type {
 			if attr.isInline {
 				isInline = 1
 			}
-			if attr.isTypedef && (isStatic+isExtern+isInline > 1) {
-				failTok(tok, "typedef and static may not be used together with static, extern or inline")
+			if attr.isTls {
+				isTls = 1
+			}
+			if attr.isTypedef && (isStatic+isExtern+isInline+isTls > 1) {
+				failTok(tok, "typedef may not be used together with static,"+
+					" extern, inline, __thread or _Thread_local")
 			}
 			tok = tok.next
 			continue
@@ -1550,6 +1559,7 @@ var typenames = []string{
 	"typedef", "enum", "static", "extern", "_Alignas", "signed", "unsigned",
 	"const", "volatile", "auto", "register", "restrict", "__restrict",
 	"__restrict__", "_Noreturn", "float", "double", "typeof", "inline",
+	"_Thread_local", "__thread",
 }
 
 // Returns true if a given token represents a type.
@@ -3274,13 +3284,14 @@ func globalVariable(tok *Token, basety *Type, attr *VarAttr) *Token {
 		vara := NewGVar(getIdent(ty.name), ty)
 		vara.isDefinition = !attr.isExtern
 		vara.isStatic = attr.isStatic
+		vara.isTls = attr.isTls
 		if attr.align != 0 {
 			vara.align = attr.align
 		}
 
 		if tok.equal("=") {
 			gvarInitializer(&tok, tok.next, vara)
-		} else if !attr.isExtern {
+		} else if !attr.isExtern && !attr.isTls {
 			vara.isTentative = true
 		}
 	}

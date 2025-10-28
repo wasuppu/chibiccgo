@@ -22,7 +22,7 @@ chibicc:
 $(TEST_DIR)/%.exe: chibicc test/%.c
 	mkdir -p $(TEST_DIR)
 	./chibicc -march=$(ARCH) -I$(INCLUDE) -Itest -c -o $(TEST_DIR)/$*.o test/$*.c
-	$(CC) $(FLAG) -o $@ $(TEST_DIR)/$*.o -xc test/common
+	$(CC) $(FLAG) -pthread -o $@ $(TEST_DIR)/$*.o -xc test/common
 
 test: $(TESTS)
 	for i in $^; do echo $$i; $(RUN) ./$$i || exit 1; echo; done
@@ -44,7 +44,7 @@ stage2/%.o: chibicc ./source/%.c
 stage2/test/%.exe: stage2/chibicc test/%.c
 	mkdir -p stage2/test
 	$(RUN) ./stage2/chibicc -Iinclude -Itest -c -o stage2/test/$*.o test/$*.c
-	gcc -o $@ stage2/test/$*.o -xc test/common
+	gcc -pthread -o $@ stage2/test/$*.o -xc test/common
 
 test-stage2: $(patsubst $(TEST_DIR)/%.exe,stage2/test/%.exe,$(TESTS))
 	for i in $^; do echo $$i; ./$$i || exit 1; echo; done
