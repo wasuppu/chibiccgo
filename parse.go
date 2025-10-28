@@ -47,6 +47,7 @@ const (
 type Node struct {
 	kind NodeKind // Node kind
 	next *Node    // Next node
+	ty   *Type    // Type, e.g. int or pointer to int
 	tok  *Token   // Representative token
 
 	lhs *Node // Left-hand side
@@ -191,6 +192,7 @@ func compoundStmt(rest **Token, tok *Token) *Node {
 	for !tok.equal("}") {
 		cur.next = stmt(&tok, tok)
 		cur = cur.next
+		cur.addType()
 	}
 
 	node.body = head.next
@@ -282,6 +284,64 @@ func relational(rest **Token, tok *Token) *Node {
 	}
 }
 
+// In C, `+` operator is overloaded to perform the pointer arithmetic.
+// If p is a pointer, p+n adds not n but sizeof(*p)*n to the value of p,
+// so that p+n points to the location n elements (not bytes) ahead of p.
+// In other words, we need to scale an integer value before adding to a
+// pointer value. This function takes care of the scaling.
+func newAdd(lhs, rhs *Node, tok *Token) *Node {
+	lhs.addType()
+	rhs.addType()
+
+	// num + num
+	if lhs.ty.isInteger() && rhs.ty.isInteger() {
+		return NewBinary(ND_ADD, lhs, rhs, tok)
+	}
+
+	if lhs.ty.base != nil && rhs.ty.base != nil {
+		failTok(tok, "invalid operands")
+	}
+
+	// Canonicalize `num + ptr` to `ptr + num`.
+	if lhs.ty.base == nil && rhs.ty.base != nil {
+		lhs, rhs = rhs, lhs
+	}
+
+	// ptr + num
+	rhs = NewBinary(ND_MUL, rhs, NewNum(8, tok), tok)
+	return NewBinary(ND_ADD, lhs, rhs, tok)
+}
+
+// Like `+`, `-` is overloaded for the pointer type.
+func newSub(lhs, rhs *Node, tok *Token) *Node {
+	lhs.addType()
+	rhs.addType()
+
+	// num - num
+	if lhs.ty.isInteger() && rhs.ty.isInteger() {
+		return NewBinary(ND_SUB, lhs, rhs, tok)
+	}
+
+	// ptr - num
+	if lhs.ty.base != nil && rhs.ty.isInteger() {
+		rhs = NewBinary(ND_MUL, rhs, NewNum(8, tok), tok)
+		rhs.addType()
+		node := NewBinary(ND_SUB, lhs, rhs, tok)
+		node.ty = lhs.ty
+		return node
+	}
+
+	// ptr - ptr, which returns how many elements are between the two.
+	if lhs.ty.base != nil && rhs.ty.base != nil {
+		node := NewBinary(ND_SUB, lhs, rhs, tok)
+		node.ty = tyInt
+		return NewBinary(ND_DIV, node, NewNum(8, tok), tok)
+	}
+
+	failTok(tok, "invalid operands")
+	return nil
+}
+
 // add = mul ("+" mul | "-" mul)*
 func add(rest **Token, tok *Token) *Node {
 	node := mul(&tok, tok)
@@ -290,12 +350,12 @@ func add(rest **Token, tok *Token) *Node {
 		start := tok
 
 		if tok.equal("+") {
-			node = NewBinary(ND_ADD, node, mul(&tok, tok.next), start)
+			node = newAdd(node, mul(&tok, tok.next), start)
 			continue
 		}
 
 		if tok.equal("-") {
-			node = NewBinary(ND_SUB, node, mul(&tok, tok.next), start)
+			node = newSub(node, mul(&tok, tok.next), start)
 			continue
 		}
 

@@ -1,0 +1,63 @@
+package main
+
+var tyInt = &Type{kind: TY_INT}
+
+type TypeKind int
+
+const (
+	TY_INT TypeKind = iota
+	TY_PTR
+)
+
+type Type struct {
+	kind TypeKind
+	base *Type
+}
+
+func (ty Type) isInteger() bool {
+	return ty.kind == TY_INT
+}
+
+func pointerTo(base *Type) *Type {
+	return &Type{
+		kind: TY_PTR,
+		base: base,
+	}
+}
+
+func (node *Node) addType() {
+	if node == nil || node.ty != nil {
+		return
+	}
+
+	node.lhs.addType()
+	node.rhs.addType()
+	node.cond.addType()
+	node.then.addType()
+	node.els.addType()
+	node.init.addType()
+	node.inc.addType()
+
+	for n := node.body; n != nil; n = n.next {
+		n.addType()
+	}
+
+	switch node.kind {
+	case ND_ADD, ND_SUB, ND_MUL, ND_DIV, ND_NEG, ND_ASSIGN:
+		node.ty = node.lhs.ty
+		return
+	case ND_EQ, ND_NE, ND_LT, ND_LE, ND_VAR, ND_NUM:
+		node.ty = tyInt
+		return
+	case ND_ADDR:
+		node.ty = pointerTo(node.lhs.ty)
+		return
+	case ND_DEREF:
+		if node.lhs.ty.kind == TY_PTR {
+			node.ty = node.lhs.ty.base
+		} else {
+			node.ty = tyInt
+		}
+		return
+	}
+}
