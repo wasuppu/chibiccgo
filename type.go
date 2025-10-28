@@ -7,6 +7,7 @@ type TypeKind int
 const (
 	TY_INT TypeKind = iota
 	TY_PTR
+	TY_FUNC
 )
 
 type Type struct {
@@ -17,6 +18,9 @@ type Type struct {
 
 	// Declaration
 	name *Token
+
+	// Function type
+	returnTy *Type
 }
 
 func (ty Type) isInteger() bool {
@@ -28,6 +32,10 @@ func pointerTo(base *Type) *Type {
 		kind: TY_PTR,
 		base: base,
 	}
+}
+
+func funcType(returnTy *Type) *Type {
+	return &Type{kind: TY_FUNC, returnTy: returnTy}
 }
 
 func (node *Node) addType() {

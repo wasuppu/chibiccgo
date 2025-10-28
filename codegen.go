@@ -5,6 +5,8 @@ import (
 )
 
 var depth int
+var currentGenFn *Function
+
 var x64ArgReg = []string{"%rdi", "%rsi", "%rdx", "%rcx", "%r8", "%r9"}
 var argRegR = []string{"a0", "a1", "a2", "a3", "a4", "a5"}
 
@@ -22,24 +24,24 @@ func chooseArch(arch string) Arch {
 }
 
 type Arch interface {
-	prologue(stackSize int)
-	epilogue()
+	prologue(fname string, stackSize int)
+	epilogue(fname string)
 	genStmt(node *Node)
 }
 
 type X64 struct{}
 
-func (a X64) prologue(stackSize int) {
-	fmt.Printf("  .globl main\n")
-	fmt.Printf("main:\n")
+func (a X64) prologue(fname string, stackSize int) {
+	fmt.Printf("  .globl %s\n", fname)
+	fmt.Printf("%s:\n", fname)
 
 	fmt.Printf("  push %%rbp\n")
 	fmt.Printf("  mov %%rsp, %%rbp\n")
 	fmt.Printf("  sub $%d, %%rsp\n", stackSize)
 }
 
-func (a X64) epilogue() {
-	fmt.Printf(".L.return:\n")
+func (a X64) epilogue(fname string) {
+	fmt.Printf(".L.return.%s:\n", fname)
 	fmt.Printf("  mov %%rbp, %%rsp\n")
 	fmt.Printf("  pop %%rbp\n")
 	fmt.Printf("  ret\n")
@@ -195,7 +197,7 @@ func (a X64) genStmt(node *Node) {
 		return
 	case ND_RETURN:
 		a.genExpr(node.lhs)
-		fmt.Printf("  jmp .L.return\n")
+		fmt.Printf("  jmp .L.return.%s\n", currentGenFn.name)
 		return
 	case ND_EXPR_STMT:
 		a.genExpr(node.lhs)
@@ -207,9 +209,9 @@ func (a X64) genStmt(node *Node) {
 
 type RiscV struct{}
 
-func (a RiscV) prologue(stackSize int) {
-	fmt.Printf("  .globl main\n")
-	fmt.Printf("main:\n")
+func (a RiscV) prologue(fname string, stackSize int) {
+	fmt.Printf("  .globl %s\n", fname)
+	fmt.Printf("%s:\n", fname)
 
 	fmt.Printf("  addi sp, sp, -16\n")
 	fmt.Printf("  sd ra, 8(sp)\n")
@@ -219,8 +221,8 @@ func (a RiscV) prologue(stackSize int) {
 	fmt.Printf("  addi sp, sp, -%d\n", stackSize)
 }
 
-func (a RiscV) epilogue() {
-	fmt.Printf(".L.return:\n")
+func (a RiscV) epilogue(fname string) {
+	fmt.Printf(".L.return.%s:\n", fname)
 	fmt.Printf("  mv sp, fp\n")
 	fmt.Printf("  ld fp, 0(sp)\n")
 	fmt.Printf("  ld ra, 8(sp)\n")
@@ -377,7 +379,7 @@ func (a RiscV) genStmt(node *Node) {
 		return
 	case ND_RETURN:
 		a.genExpr(node.lhs)
-		fmt.Printf("  j .L.return\n")
+		fmt.Printf("  j .L.return.%s\n", currentGenFn.name)
 		return
 	case ND_EXPR_STMT:
 		a.genExpr(node.lhs)
@@ -391,12 +393,19 @@ func codegen(arch string, prog *Function) {
 	assignLVarOffsets(prog)
 
 	target := chooseArch(arch)
-	target.prologue(prog.stackSize)
+	for fn := prog; fn != nil; fn = fn.next {
+		// Prologue
+		target.prologue(fn.name, fn.stackSize)
+		currentGenFn = fn
 
-	target.genStmt(prog.body)
-	assert(depth == 0)
+		// Emit code
+		target.genStmt(fn.body)
+		assert(depth == 0)
 
-	target.epilogue()
+		// Epilogue
+		target.epilogue(fn.name)
+	}
+
 }
 
 // Round up `n` to the nearest multiple of `align`. For instance,
@@ -407,12 +416,14 @@ func alignTo(n, align int) int {
 
 // Assign offsets to local variables.
 func assignLVarOffsets(prog *Function) {
-	offset := 0
-	for vara := prog.locals; vara != nil; vara = vara.next {
-		offset += 8
-		vara.offset = -offset
+	for fn := prog; fn != nil; fn = fn.next {
+		offset := 0
+		for vara := fn.locals; vara != nil; vara = vara.next {
+			offset += 8
+			vara.offset = -offset
+		}
+		fn.stackSize = alignTo(offset, 16)
 	}
-	prog.stackSize = alignTo(offset, 16)
 }
 
 var I = 1

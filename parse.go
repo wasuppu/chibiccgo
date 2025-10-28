@@ -14,6 +14,8 @@ type Obj struct {
 
 // Function
 type Function struct {
+	next      *Function
+	name      string
 	body      *Node
 	locals    *Obj
 	stackSize int
@@ -139,7 +141,17 @@ func declspec(rest **Token, tok *Token) *Type {
 	return tyInt
 }
 
-// declarator = "*"* ident
+// type-suffix = ("(" func-params)?
+func typeSuffix(rest **Token, tok *Token, ty *Type) *Type {
+	if tok.equal("(") {
+		*rest = tok.next.skip(")")
+		return funcType(ty)
+	}
+	*rest = tok
+	return ty
+}
+
+// declarator = "*"* ident type-suffix
 func declarator(rest **Token, tok *Token, ty *Type) *Type {
 	for consume(&tok, tok, "*") {
 		ty = pointerTo(ty)
@@ -149,8 +161,8 @@ func declarator(rest **Token, tok *Token, ty *Type) *Type {
 		failTok(tok, "expected a variable name")
 	}
 
+	ty = typeSuffix(rest, tok.next, ty)
 	ty.name = tok
-	*rest = tok.next
 	return ty
 }
 
@@ -538,12 +550,29 @@ func primary(rest **Token, tok *Token) *Node {
 	return nil
 }
 
-// program = stmt*
-func parse(tok *Token) *Function {
-	tok = tok.skip("{")
+func function(rest **Token, tok *Token) *Function {
+	ty := declspec(&tok, tok)
+	ty = declarator(&tok, tok, ty)
 
-	prog := &Function{}
-	prog.body = compoundStmt(&tok, tok)
-	prog.locals = locals
-	return prog
+	locals = nil
+
+	fn := &Function{name: getIdent(ty.name)}
+
+	tok = tok.skip("{")
+	fn.body = compoundStmt(rest, tok)
+	fn.locals = locals
+	return fn
+}
+
+// program = function-definition*
+func parse(tok *Token) *Function {
+	head := Function{}
+	cur := &head
+
+	for tok.kind != TK_EOF {
+		cur.next = function(&tok, tok)
+		cur = cur.next
+	}
+
+	return head.next
 }
