@@ -131,14 +131,14 @@ func isIdent2(c byte) bool {
 	return isIdent1(c) || ('0' <= c && c <= '9')
 }
 
-func fromHex(c byte) byte {
+func fromHex(c byte) int {
 	if '0' <= c && c <= '9' {
-		return c - '0'
+		return int(c - '0')
 	}
 	if 'a' <= c && c <= 'f' {
-		return c - 'a' + 10
+		return int(c - 'a' + 10)
 	}
-	return c - 'A' + 10
+	return int(c - 'A' + 10)
 }
 
 // Read a punctuator token from p and returns its length.
@@ -160,16 +160,16 @@ func isKeyword(tok *Token) bool {
 	return slices.ContainsFunc(kws, tok.equal)
 }
 
-func readEscapedChar(newPos *int, p int) byte {
+func readEscapedChar(newPos *int, p int) int {
 	if '0' <= source[p] && source[p] <= '7' {
 		// Read an octal number.
-		c := source[p] - '0'
+		c := int(source[p] - '0')
 		p++
 		if '0' <= source[p] && source[p] <= '7' {
-			c = (c << 3) + (source[p] - '0')
+			c = (c << 3) + (int(source[p]) - '0')
 			p++
 			if '0' <= source[p] && source[p] <= '7' {
-				c = (c << 3) + (source[p] - '0')
+				c = (c << 3) + (int(source[p]) - '0')
 				p++
 			}
 		}
@@ -184,7 +184,7 @@ func readEscapedChar(newPos *int, p int) byte {
 			failAt(p, "invalid hex escape sequence")
 		}
 
-		c := byte(0)
+		c := int(0)
 		for ; isXDigit(source[p]); p++ {
 			c = (c << 4) + fromHex(source[p])
 		}
@@ -213,7 +213,7 @@ func readEscapedChar(newPos *int, p int) byte {
 	case 'e':
 		return 27
 	default:
-		return source[p]
+		return int(source[p])
 	}
 }
 
@@ -238,7 +238,7 @@ func readStringLiteral(start, quote int) *Token {
 
 	for p := quote + 1; p < end; {
 		if source[p] == '\\' {
-			buf[len] = readEscapedChar(&p, p+1)
+			buf[len] = byte(readEscapedChar(&p, p+1))
 			len++
 		} else {
 			buf[len] = source[p]
@@ -297,6 +297,36 @@ func readUtf16StringLiteral(start, quote int) *Token {
 	bs := make([]byte, len(buf)*2)
 	for i, v := range buf {
 		binary.LittleEndian.PutUint16(bs[i*2:], v)
+	}
+	tok.str = string(bs)
+	return tok
+}
+
+// Read a UTF-8-encoded string literal and transcode it in UTF-32.
+//
+// UTF-32 is a fixed-width encoding for Unicode. Each code point is
+// encoded in 4 bytes.
+func readUtf32StringLiteral(start, quote int, ty *Type) *Token {
+	end := stringLiteralEnd(quote + 1)
+	buf := make([]uint32, end-quote)
+	l := 0
+
+	for p := quote + 1; p < end; {
+		if source[p] == '\\' {
+			buf[l] = uint32(readEscapedChar(&p, p+1))
+			l++
+		} else {
+			buf[l] = decodeUtf8(&p, p)
+			l++
+		}
+	}
+
+	tok := NewToken(TK_STR, start, end+1-start, source[start:end+1])
+	tok.ty = arrayOf(ty, l+1)
+
+	bs := make([]byte, len(buf)*4)
+	for i, v := range buf {
+		binary.LittleEndian.PutUint32(bs[i*4:], v)
 	}
 	tok.str = string(bs)
 	return tok
@@ -592,6 +622,14 @@ func tokenize(file *File) *Token {
 		// UTF-16 string literal
 		if strings.HasPrefix(input[p:], "u\"") {
 			cur.next = readUtf16StringLiteral(p, p+1)
+			cur = cur.next
+			p += cur.len
+			continue
+		}
+
+		// UTF-32 string literal
+		if strings.HasPrefix(input[p:], "U\"") {
+			cur.next = readUtf32StringLiteral(p, p+1, tyUInt)
 			cur = cur.next
 			p += cur.len
 			continue

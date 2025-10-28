@@ -1363,7 +1363,7 @@ func (a X64) emitData(prog *Obj) {
 					rel = rel.next
 					pos += 8
 				} else {
-					println("  .byte %d", vara.initData[pos])
+					println("  .byte %d", int8(vara.initData[pos]))
 					pos++
 				}
 			}
