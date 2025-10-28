@@ -627,6 +627,14 @@ func tokenize(file *File) *Token {
 			continue
 		}
 
+		// Wide string literal
+		if strings.HasPrefix(input[p:], "L\"") {
+			cur.next = readUtf32StringLiteral(p, p+1, tyInt)
+			cur = cur.next
+			p += cur.len
+			continue
+		}
+
 		// UTF-32 string literal
 		if strings.HasPrefix(input[p:], "U\"") {
 			cur.next = readUtf32StringLiteral(p, p+1, tyUInt)
