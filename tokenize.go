@@ -8,6 +8,9 @@ import (
 	"unicode"
 )
 
+var source string
+var currentInputLoc int
+
 // Token
 type TokenKind int
 
@@ -42,10 +45,10 @@ func (tok Token) equal(op string) bool {
 	return len(op) == tok.len && tok.lexeme == op
 }
 
-// Ensure that the current token is `s`.
-func (tok Token) skip(s string) *Token {
-	if !tok.equal(s) {
-		failTok(&tok, "expected '%s'", s)
+// Ensure that the current token is `op`.
+func (tok Token) skip(op string) *Token {
+	if !tok.equal(op) {
+		failTok(&tok, "expected '%s'", op)
 	}
 	return tok.next
 }
@@ -64,9 +67,9 @@ func readPunct(p int) int {
 	}
 }
 
-// Tokenize `p` and returns new tokens.
-func tokenize() *Token {
-	input := source
+// Tokenize `current_input` and returns new tokens.
+func tokenize(input string) *Token {
+	source = input
 	head := Token{}
 	cur := &head
 	p := 0

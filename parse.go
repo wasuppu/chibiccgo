@@ -178,3 +178,13 @@ func primary(rest **Token, tok *Token) *Node {
 	failTok(tok, "expected an expression")
 	return nil
 }
+
+func parse(tok *Token) *Node {
+	node := expr(&tok, tok)
+
+	if tok.kind != TK_EOF {
+		failTok(tok, "extra token")
+	}
+
+	return node
+}

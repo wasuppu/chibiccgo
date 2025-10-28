@@ -1,8 +1,23 @@
 package main
 
-import "fmt"
+import (
+	"fmt"
+)
 
 var depth int
+
+func chooseArch(arch string) Arch {
+	var target Arch
+	switch arch {
+	case "x64":
+		target = &X64{}
+	case "riscv":
+		target = &RiscV{}
+	default:
+		fail("unsupported architecture: %s", arch)
+	}
+	return target
+}
 
 type Arch interface {
 	prologue()
@@ -156,4 +171,13 @@ func (a RiscV) genExpr(node *Node) {
 	}
 
 	fail("invalid expression")
+}
+
+func codegen(arch string, node *Node) {
+	target := chooseArch(arch)
+	target.prologue()
+	target.genExpr(node)
+	target.epilogue()
+
+	assert(depth == 0)
 }
