@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"slices"
 	"strconv"
 	"strings"
 	"unicode"
@@ -21,6 +20,8 @@ var atBol bool
 
 // True if the current position follows a space character
 var hasSpace bool
+
+var keymap HashMap
 
 var kws = []string{
 	"return", "if", "else", "for", "while", "int", "sizeof", "char",
@@ -175,7 +176,7 @@ func readPunct(p int) int {
 }
 
 func isKeyword(tok *Token) bool {
-	return slices.ContainsFunc(kws, tok.equal)
+	return hashmapGet2(&keymap, []byte(tok.lexeme), tok.len) != nil
 }
 
 func readEscapedChar(newPos *int, p int) int {

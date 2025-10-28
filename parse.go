@@ -1649,14 +1649,11 @@ var typenames = []string{
 	"_Thread_local", "__thread",
 }
 
+var typemap HashMap
+
 // Returns true if a given token represents a type.
 func isTypename(tok *Token) bool {
-	for i := range typenames {
-		if tok.equal(typenames[i]) {
-			return true
-		}
-	}
-	return findTypedef(tok) != nil
+	return hashmapGet2(&typemap, []byte(tok.lexeme), tok.len) != nil || findTypedef(tok) != nil
 }
 
 // asm-stmt = "asm" ("volatile" | "inline")* "(" string-literal ")"

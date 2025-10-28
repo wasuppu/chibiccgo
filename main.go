@@ -42,6 +42,15 @@ var includePaths []string
 
 var rvpath = "/opt/riscv-linux"
 
+func init() {
+	for i := range kws {
+		hashmapPut(&keymap, kws[i], 1)
+	}
+	for i := range typenames {
+		hashmapPut(&typemap, typenames[i], 1)
+	}
+}
+
 func usage(status int) {
 	fmt.Fprintf(os.Stderr, "chibicc [ -o <path> ] <file>\n")
 	os.Exit(status)
