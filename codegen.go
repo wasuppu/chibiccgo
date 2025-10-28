@@ -5,6 +5,7 @@ import (
 	"os"
 )
 
+var ArchName string
 var outputFile *os.File
 var depth int
 var currentGenFn *Obj
@@ -13,7 +14,7 @@ var argReg8x = []string{"%dil", "%sil", "%dl", "%cl", "%r8b", "%r9b"}
 var argReg16x = []string{"%di", "%si", "%dx", "%cx", "%r8w", "%r9w"}
 var argReg32x = []string{"%edi", "%esi", "%edx", "%ecx", "%r8d", "%r9d"}
 var argReg64x = []string{"%rdi", "%rsi", "%rdx", "%rcx", "%r8", "%r9"}
-var argRegR = []string{"a0", "a1", "a2", "a3", "a4", "a5"}
+var argRegR = []string{"a0", "a1", "a2", "a3", "a4", "a5", "a6", "a7"}
 
 const (
 	I8 = iota
@@ -67,6 +68,7 @@ func chooseArch(arch string) Arch {
 	default:
 		fail("unsupported architecture: %s", arch)
 	}
+	ArchName = arch
 	return target
 }
 
@@ -549,6 +551,37 @@ func (a X64) emitText(prog *Obj) {
 		// Prologue
 		a.prologue(fn.name, fn.stackSize, fn.isStatic)
 		currentGenFn = fn
+
+		// Save arg registers if function is variadic
+		if fn.vaArea != nil {
+			gp := 0
+			for vara := fn.params; vara != nil; vara = vara.next {
+				gp++
+			}
+			off := fn.vaArea.offset
+
+			// va_elem
+			println("  movl $%d, %d(%%rbp)", gp*8, off)
+			println("  movl $0, %d(%%rbp)", off+4)
+			println("  movq %%rbp, %d(%%rbp)", off+16)
+			println("  addq $%d, %d(%%rbp)", off+24, off+16)
+
+			// __reg_save_area__
+			println("  movq %%rdi, %d(%%rbp)", off+24)
+			println("  movq %%rsi, %d(%%rbp)", off+32)
+			println("  movq %%rdx, %d(%%rbp)", off+40)
+			println("  movq %%rcx, %d(%%rbp)", off+48)
+			println("  movq %%r8, %d(%%rbp)", off+56)
+			println("  movq %%r9, %d(%%rbp)", off+64)
+			println("  movsd %%xmm0, %d(%%rbp)", off+72)
+			println("  movsd %%xmm1, %d(%%rbp)", off+80)
+			println("  movsd %%xmm2, %d(%%rbp)", off+88)
+			println("  movsd %%xmm3, %d(%%rbp)", off+96)
+			println("  movsd %%xmm4, %d(%%rbp)", off+104)
+			println("  movsd %%xmm5, %d(%%rbp)", off+112)
+			println("  movsd %%xmm6, %d(%%rbp)", off+120)
+			println("  movsd %%xmm7, %d(%%rbp)", off+128)
+		}
 
 		// Save passed-by-register arguments to the stack
 		i := 0
@@ -1058,6 +1091,15 @@ func (a RiscV) emitText(prog *Obj) {
 			i++
 		}
 
+		if fn.vaArea != nil {
+			offset := fn.vaArea.offset
+			for i < 8 {
+				a.storeGP(i, offset, 8)
+				i++
+				offset += 8
+			}
+		}
+
 		// Emit code
 		a.genStmt(fn.body)
 		assert(depth == 0)
@@ -1122,11 +1164,10 @@ func simpleLog2(num int) int {
 	return e
 }
 
-func codegen(arch string, prog *Obj, out *os.File) {
+func codegen(target Arch, prog *Obj, out *os.File) {
 	outputFile = out
 	assignLVarOffsets(prog)
 
-	target := chooseArch(arch)
 	target.emitData(prog)
 	target.emitText(prog)
 }

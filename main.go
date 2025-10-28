@@ -72,6 +72,8 @@ func openFile(path string) *os.File {
 func main() {
 	parseArgs(os.Args)
 
+	target := chooseArch(optMarch)
+
 	// Tokenize and parse.
 	tok := tokenizeFile(inputPath)
 	prog := parse(tok)
@@ -79,5 +81,5 @@ func main() {
 	// Traverse the AST to emit assembly.
 	out := openFile(optO)
 	fmt.Fprintf(out, ".file 1 \"%s\"\n", inputPath)
-	codegen(optMarch, prog, out)
+	codegen(target, prog, out)
 }

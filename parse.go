@@ -88,6 +88,7 @@ type Obj struct {
 	params    *Obj
 	body      *Node
 	locals    *Obj
+	vaArea    *Obj
 	stackSize int
 }
 
@@ -2436,6 +2437,16 @@ func function(tok *Token, basety *Type, attr *VarAttr) *Token {
 	enterScope()
 	createParamLvars(ty.params)
 	fn.params = locals
+	if ty.isVariadic {
+		switch ArchName {
+		case "x64":
+			fn.vaArea = NewLVar("__va_area__", arrayOf(tyChar, 136))
+		case "riscv":
+			fn.vaArea = NewLVar("__va_area__", arrayOf(tyChar, 64))
+		default:
+			fail("invalid arch:", ArchName)
+		}
+	}
 
 	tok = tok.skip("{")
 	fn.body = compoundStmt(&tok, tok)
