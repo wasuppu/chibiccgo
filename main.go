@@ -10,6 +10,16 @@ import (
 	"strings"
 )
 
+type FileType int
+
+const (
+	FILE_NONE FileType = iota
+	FILE_C
+	FILE_ASM
+	FILE_OBJ
+)
+
+var optX FileType
 var optFcommon bool = true
 var optE bool
 var optS bool
@@ -35,7 +45,7 @@ func usage(status int) {
 }
 
 func takeArg(arg string) bool {
-	x := []string{"-o", "-I", "-idirafter", "-include"}
+	x := []string{"-o", "-I", "-idirafter", "-include", "-x"}
 
 	for i := range x {
 		if arg == x[i] {
@@ -78,6 +88,20 @@ func define(str string) {
 	} else {
 		defineMacro(str, "1")
 	}
+}
+
+func parseOptX(s string) FileType {
+	if s == "c" {
+		return FILE_C
+	}
+	if s == "assembler" {
+		return FILE_ASM
+	}
+	if s == "none" {
+		return FILE_NONE
+	}
+	fail(fmt.Sprintf("<command line>: unknown argument for -x: %s", s))
+	return -1
 }
 
 func parseArgs(args []string) {
@@ -180,6 +204,17 @@ func parseArgs(args []string) {
 		if args[i] == "-include" {
 			i++
 			optInclude = append(optInclude, args[i])
+			continue
+		}
+
+		if args[i] == "-x" {
+			i++
+			optX = parseOptX(args[i])
+			continue
+		}
+
+		if strings.HasPrefix(args[i], "-x") {
+			optX = parseOptX(args[i][2:])
 			continue
 		}
 
@@ -589,6 +624,28 @@ func (a RiscV) runLinker(inputs []string, output string) {
 	runSubprocess(arr)
 }
 
+func getFileType(filename string) FileType {
+	ext := filepath.Ext(filename)
+	if ext == ".o" {
+		return FILE_OBJ
+	}
+
+	if optX != FILE_NONE {
+		return optX
+	}
+
+	if ext == ".c" {
+		return FILE_C
+	}
+
+	if ext == ".s" {
+		return FILE_ASM
+	}
+
+	fail(fmt.Sprintf("<command line>: unknown file extension: %s", filename))
+	return -1
+}
+
 func main() {
 	defer cleanup()
 
@@ -620,24 +677,23 @@ func main() {
 			output = replaceExtn(input, ".o")
 		}
 
+		filetype := getFileType(input)
+
 		// Handle .o
-		if strings.HasSuffix(input, ".o") {
+		if filetype == FILE_OBJ {
 			ldArgs = append(ldArgs, input)
 			continue
 		}
 
 		// Handle .s
-		if strings.HasSuffix(input, ".s") {
+		if filetype == FILE_ASM {
 			if !optS {
 				target.assemble(input, output)
 			}
 			continue
 		}
 
-		// Handle .c
-		if !strings.HasSuffix(input, ".c") && input != "-" {
-			fail("unknown file extension: %s", input)
-		}
+		assert(filetype == FILE_C)
 
 		// Just preprocess
 		if optE {
