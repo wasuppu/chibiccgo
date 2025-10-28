@@ -725,7 +725,8 @@ func (a RiscV) prologue(fname string, stackSize int, isStatic bool) {
 	println("  sd fp, 0(sp)")
 	println("  mv fp, sp")
 
-	println("  addi sp, sp, -%d", stackSize)
+	println("  li t0, -%d", stackSize)
+	println("  add sp, sp, t0")
 }
 
 func (a RiscV) epilogue(fname string) {
@@ -802,18 +803,21 @@ func (a RiscV) store(ty *Type) {
 }
 
 func (a RiscV) storeGP(r, offset, sz int) {
+	println("  li t0, %d", offset)
+	println("  add t0, fp, t0")
+
 	switch sz {
 	case 1:
-		println("  sb %s, %d(fp)", argRegR[r], offset)
+		println("  sb %s, 0(t0)", argRegR[r])
 		return
 	case 2:
-		println("  sh %s, %d(fp)", argRegR[r], offset)
+		println("  sh %s, 0(t0)", argRegR[r])
 		return
 	case 4:
-		println("  sw %s, %d(fp)", argRegR[r], offset)
+		println("  sw %s, 0(t0)", argRegR[r])
 		return
 	case 8:
-		println("  sd %s, %d(fp)", argRegR[r], offset)
+		println("  sd %s, 0(t0)", argRegR[r])
 		return
 	}
 	unreachable()
@@ -842,7 +846,8 @@ func (a RiscV) genAddr(node *Node) {
 	switch node.kind {
 	case ND_VAR:
 		if node.vara.isLocal {
-			println("  addi a0, fp, %d", node.vara.offset)
+			println("  li t0, %d", node.vara.offset)
+			println("  add a0, fp, t0")
 		} else {
 			println("  la a0, %s", node.vara.name)
 		}
@@ -914,7 +919,9 @@ func (a RiscV) genExpr(node *Node) {
 		return
 	case ND_MEMZERO:
 		for i := range node.vara.ty.size {
-			println("  sb zero, %d(fp)", node.vara.offset+i)
+			println("  li t0, %d", node.vara.offset+i)
+			println("  add t0, fp, t0")
+			println("  sb zero, 0(t0)")
 		}
 		return
 	case ND_COND:

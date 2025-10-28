@@ -1521,10 +1521,16 @@ func eval2(node *Node, label *string) int64 {
 	case ND_MUL:
 		return eval(node.lhs) * eval(node.rhs)
 	case ND_DIV:
+		if node.ty.isUnsigned {
+			return int64(uint64(eval(node.lhs)) / uint64(eval(node.rhs)))
+		}
 		return eval(node.lhs) / eval(node.rhs)
 	case ND_NEG:
 		return -eval(node.lhs)
 	case ND_MOD:
+		if node.ty.isUnsigned {
+			return int64(uint64(eval(node.lhs)) % uint64(eval(node.rhs)))
+		}
 		return eval(node.lhs) % eval(node.rhs)
 	case ND_BITAND:
 		return eval(node.lhs) & eval(node.rhs)
@@ -1535,6 +1541,9 @@ func eval2(node *Node, label *string) int64 {
 	case ND_SHL:
 		return eval(node.lhs) << eval(node.rhs)
 	case ND_SHR:
+		if node.ty.isUnsigned && node.ty.size == 8 {
+			return int64(uint64(eval(node.lhs)) >> uint64(eval(node.rhs)))
+		}
 		return eval(node.lhs) >> eval(node.rhs)
 	case ND_EQ:
 		if eval(node.lhs) == eval(node.rhs) {
@@ -1549,12 +1558,26 @@ func eval2(node *Node, label *string) int64 {
 			return 0
 		}
 	case ND_LT:
+		if node.ty.isUnsigned {
+			if uint64(eval(node.lhs)) < uint64(eval(node.rhs)) {
+				return 1
+			} else {
+				return 0
+			}
+		}
 		if eval(node.lhs) < eval(node.rhs) {
 			return 1
 		} else {
 			return 0
 		}
 	case ND_LE:
+		if node.ty.isUnsigned {
+			if uint64(eval(node.lhs)) <= uint64(eval(node.rhs)) {
+				return 1
+			} else {
+				return 0
+			}
+		}
 		if eval(node.lhs) <= eval(node.rhs) {
 			return 1
 		} else {
@@ -1593,11 +1616,23 @@ func eval2(node *Node, label *string) int64 {
 		if node.ty.isInteger() {
 			switch node.ty.size {
 			case 1:
-				return int64(uint8(val))
+				if node.ty.isUnsigned {
+					return int64(uint8(val))
+				} else {
+					return int64(int8(val))
+				}
 			case 2:
-				return int64(uint16(val))
+				if node.ty.isUnsigned {
+					return int64(uint16(val))
+				} else {
+					return int64(int16(val))
+				}
 			case 4:
-				return int64(uint32(val))
+				if node.ty.isUnsigned {
+					return int64(uint32(val))
+				} else {
+					return int64(int32(val))
+				}
 			}
 		}
 		return val
