@@ -266,6 +266,17 @@ func (a X64) genExpr(node *Node) {
 		a.genExpr(node.lhs)
 		a.castType(node.lhs.ty, node.ty)
 		return
+	case ND_COND:
+		c := count()
+		a.genExpr(node.cond)
+		println("  cmp $0, %%rax")
+		println("  je .L.else.%d", c)
+		a.genExpr(node.then)
+		println("  jmp .L.end.%d", c)
+		println(".L.else.%d:", c)
+		a.genExpr(node.els)
+		println(".L.end.%d:", c)
+		return
 	case ND_NOT:
 		a.genExpr(node.lhs)
 		println("  cmp $0, %%rax")
@@ -707,6 +718,16 @@ func (a RiscV) genExpr(node *Node) {
 	case ND_CAST:
 		a.genExpr(node.lhs)
 		a.castType(node.lhs.ty, node.ty)
+		return
+	case ND_COND:
+		c := count()
+		a.genExpr(node.cond)
+		println("  beqz a0, .L.else.%d", c)
+		a.genExpr(node.then)
+		println("  j .L.end.%d", c)
+		println(".L.else.%d:", c)
+		a.genExpr(node.els)
+		println(".L.end.%d:", c)
 		return
 	case ND_NOT:
 		a.genExpr(node.lhs)
