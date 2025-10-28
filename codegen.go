@@ -268,6 +268,13 @@ func (a X64) genExpr(node *Node) {
 		a.genExpr(node.lhs)
 		a.castType(node.lhs.ty, node.ty)
 		return
+	case ND_MEMZERO:
+		// `rep stosb` is equivalent to `memset(%rdi, %al, %rcx)`.
+		println("  mov $%d, %%rcx", node.vara.ty.size)
+		println("  lea %d(%%rbp), %%rdi", node.vara.offset)
+		println("  mov $0, %%al")
+		println("  rep stosb")
+		return
 	case ND_COND:
 		c := count()
 		a.genExpr(node.cond)
@@ -722,6 +729,11 @@ func (a RiscV) genExpr(node *Node) {
 	case ND_CAST:
 		a.genExpr(node.lhs)
 		a.castType(node.lhs.ty, node.ty)
+		return
+	case ND_MEMZERO:
+		for i := range node.vara.ty.size {
+			println("  sb zero, %d(fp)", node.vara.offset+i)
+		}
 		return
 	case ND_COND:
 		c := count()

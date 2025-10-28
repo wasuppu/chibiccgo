@@ -126,6 +126,7 @@ const (
 	ND_VAR                       // Variable
 	ND_NUM                       // Integer
 	ND_CAST                      // Type cast
+	ND_MEMZERO                   // Zero-clear a stack variable
 )
 
 // AST node type
@@ -695,7 +696,7 @@ func initializer2(rest **Token, tok *Token, init *Initializer) {
 	if init.ty.kind == TY_ARRAY {
 		tok = tok.skip("{")
 
-		for i := range init.ty.arrayLen {
+		for i := 0; i < init.ty.arrayLen && !tok.equal("}"); i++ {
 			if i > 0 {
 				tok = tok.skip(",")
 			}
@@ -735,9 +736,12 @@ func createLVarInit(init *Initializer, ty *Type, desg *InitDesg, tok *Token) *No
 		return node
 	}
 
+	if init.expr == nil {
+		return NewNode(ND_NULL_EXPR, tok)
+	}
+
 	lhs := initDesgExpr(desg, tok)
-	rhs := init.expr
-	return NewBinary(ND_ASSIGN, lhs, rhs, tok)
+	return NewBinary(ND_ASSIGN, lhs, init.expr, tok)
 }
 
 // A variable definition with an initializer is a shorthand notation
@@ -753,7 +757,16 @@ func createLVarInit(init *Initializer, ty *Type, desg *InitDesg, tok *Token) *No
 func lvarInitializer(rest **Token, tok *Token, vara *Obj) *Node {
 	init := initializer(rest, tok, vara.ty)
 	desg := InitDesg{nil, 0, vara}
-	return createLVarInit(init, vara.ty, &desg, tok)
+
+	// If a partial initializer list is given, the standard requires
+	// that unspecified elements are set to 0. Here, we simply
+	// zero-initialize the entire memory region of a variable before
+	// initializing it with user-supplied values.
+	lhs := NewNode(ND_MEMZERO, tok)
+	lhs.vara = vara
+
+	rhs := createLVarInit(init, vara.ty, &desg, tok)
+	return NewBinary(ND_COMMA, lhs, rhs, tok)
 }
 
 var typenames = []string{
