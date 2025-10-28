@@ -2495,6 +2495,7 @@ func funcall(rest **Token, tok *Token, fn *Node) *Node {
 // | "sizeof" unary
 // | "_Alignof" "(" type-name ")"
 // | "_Alignof" unary
+// | "__builtin_reg_class" "(" type-name ")"
 // | ident
 // | str
 // | num
@@ -2537,6 +2538,22 @@ func primary(rest **Token, tok *Token) *Node {
 		node := unary(rest, tok.next)
 		node.addType()
 		return NewULong(int64(node.ty.align), tok)
+	}
+
+	if ArchName != "riscv" {
+		if tok.equal("__builtin_reg_class") {
+			tok = tok.next.skip("(")
+			ty := typename(&tok, tok)
+			*rest = tok.skip(")")
+
+			if ty.isInteger() || ty.kind == TY_PTR {
+				return NewNum(0, start)
+			}
+			if ty.isFlonum() {
+				return NewNum(1, start)
+			}
+			return NewNum(2, start)
+		}
 	}
 
 	if tok.kind == TK_IDENT {

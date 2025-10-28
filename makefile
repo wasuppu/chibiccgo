@@ -6,10 +6,12 @@ ifeq ($(ARCH),riscv)
     CC = riscv64-unknown-linux-gnu-gcc
 	RUN = qemu-riscv64 -L /opt/riscv-linux/sysroot
 	FLAG = -static
+	INCLUDE = include2
 else
     CC = gcc
     RUN =
 	FLAG =
+	INCLUDE = include
 endif
 
 chibicc:
@@ -19,7 +21,7 @@ chibicc:
 
 $(TEST_DIR)/%.exe: chibicc test/%.c
 	mkdir -p $(TEST_DIR)
-	./chibicc -march=$(ARCH) -Iinclude -Itest -c -o $(TEST_DIR)/$*.o test/$*.c
+	./chibicc -march=$(ARCH) -I$(INCLUDE) -Itest -c -o $(TEST_DIR)/$*.o test/$*.c
 	$(CC) $(FLAG) -o $@ $(TEST_DIR)/$*.o -xc test/common
 
 test: $(TESTS)
