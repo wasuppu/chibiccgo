@@ -33,7 +33,7 @@ func usage(status int) {
 }
 
 func takeArg(arg string) bool {
-	x := []string{"-o", "-I"}
+	x := []string{"-o", "-I", "-idirafter"}
 
 	for i := range x {
 		if arg == x[i] {
@@ -89,6 +89,8 @@ func parseArgs(args []string) {
 			}
 		}
 	}
+
+	var idirafter []string
 
 	for i := 1; i < len(args); i++ {
 		if args[i] == "-###" {
@@ -175,6 +177,12 @@ func parseArgs(args []string) {
 			continue
 		}
 
+		if args[i] == "-idirafter" {
+			idirafter = append(idirafter, args[i])
+			i++
+			continue
+		}
+
 		// These options are ignored for now.
 		if strings.HasPrefix(args[i], "-O") ||
 			strings.HasPrefix(args[i], "-W") ||
@@ -197,6 +205,8 @@ func parseArgs(args []string) {
 
 		inputPaths = append(inputPaths, args[i])
 	}
+
+	includePaths = append(includePaths, idirafter...)
 
 	if len(inputPaths) == 0 {
 		fail("no input files")
