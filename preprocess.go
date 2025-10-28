@@ -11,6 +11,7 @@ import (
 var cachemap HashMap
 var includeGuardMap HashMap
 var pragmaOnceMap HashMap
+var includeNextIdx int
 
 var condIncl *CondIncl
 var macros HashMap
@@ -756,9 +757,20 @@ func searchIncludePaths(filename string) string {
 			continue
 		}
 		hashmapPut(&cachemap, filename, path)
+		includeNextIdx = i + 1
 		return path
 	}
 
+	return ""
+}
+
+func searchIncludeNext(filename string) string {
+	for ; includeNextIdx < len(includePaths); includeNextIdx++ {
+		path := fmt.Sprintf("%s/%s", includePaths[includeNextIdx], filename)
+		if fileExists(path) {
+			return path
+		}
+	}
 	return ""
 }
 
@@ -940,6 +952,18 @@ func preprocess2(tok *Token) *Token {
 			}
 
 			path := searchIncludePaths(filename)
+			if len(path) > 0 {
+				tok = includeFile(tok, path, start.next.next)
+			} else {
+				tok = includeFile(tok, filename, start.next.next)
+			}
+			continue
+		}
+
+		if tok.equal("include_next") {
+			var ignore bool
+			filename := readIncludeFilename(&tok, tok.next, &ignore)
+			path := searchIncludeNext(filename)
 			if len(path) > 0 {
 				tok = includeFile(tok, path, start.next.next)
 			} else {
