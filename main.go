@@ -214,7 +214,10 @@ func printTokens(tok *Token) {
 		if line > 1 && tok.atBol {
 			fmt.Fprintf(out, "\n")
 		}
-		fmt.Fprintf(out, " %.*s", tok.len, currentFile.contents[tok.loc:])
+		if tok.hasSpace && !tok.atBol {
+			fmt.Fprintf(out, " ")
+		}
+		fmt.Fprintf(out, "%.*s", tok.len, currentFile.contents[tok.loc:])
 		line++
 	}
 	fmt.Fprintf(out, "\n")

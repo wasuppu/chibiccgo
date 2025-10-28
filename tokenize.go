@@ -18,6 +18,9 @@ var currentFile *File
 // True if the current position is at the beginning of a line
 var atBol bool
 
+// True if the current position follows a space character
+var hasSpace bool
+
 var kws = []string{
 	"return", "if", "else", "for", "while", "int", "sizeof", "char",
 	"struct", "union", "short", "long", "void", "typedef", "_Bool",
@@ -61,32 +64,35 @@ const (
 
 // Token type
 type Token struct {
-	kind    TokenKind // Token kind
-	next    *Token    // Next token
-	val     int64     // If kind is TK_NUM, its value
-	fval    float64   // If kind is TK_NUM, its value
-	loc     int       // Token location
-	len     int       // Token length
-	lexeme  string    // Token lexeme value in string
-	ty      *Type     // Used if TK_NUM or TK_STR
-	str     string    // String literal contents including terminating '\0'
-	file    *File     // Source location
-	lineno  int       // Line number
-	atBol   bool      // True if this token is at beginning of line
-	hideset *Hideset  // For macro expansion
+	kind     TokenKind // Token kind
+	next     *Token    // Next token
+	val      int64     // If kind is TK_NUM, its value
+	fval     float64   // If kind is TK_NUM, its value
+	loc      int       // Token location
+	len      int       // Token length
+	lexeme   string    // Token lexeme value in string
+	ty       *Type     // Used if TK_NUM or TK_STR
+	str      string    // String literal contents including terminating '\0'
+	file     *File     // Source location
+	lineno   int       // Line number
+	atBol    bool      // True if this token is at beginning of line
+	hasSpace bool      // True if this token follows a space character
+	hideset  *Hideset  // For macro expansion
 }
 
 // Create a new token.
 func NewToken(kind TokenKind, pos int, len int, lexme string) *Token {
 	tok := &Token{
-		kind:   kind,
-		loc:    pos,
-		len:    len,
-		file:   currentFile,
-		lexeme: lexme,
-		atBol:  atBol,
+		kind:     kind,
+		loc:      pos,
+		len:      len,
+		file:     currentFile,
+		lexeme:   lexme,
+		atBol:    atBol,
+		hasSpace: hasSpace,
 	}
 	atBol = false
+	hasSpace = false
 	return tok
 }
 
@@ -448,6 +454,7 @@ func tokenize(file *File) *Token {
 	p := 0
 
 	atBol = true
+	hasSpace = false
 
 	for p < len(input) {
 		// Skip line comments.
@@ -456,6 +463,7 @@ func tokenize(file *File) *Token {
 			for input[p] != '\n' {
 				p++
 			}
+			hasSpace = true
 			continue
 		}
 
@@ -466,6 +474,7 @@ func tokenize(file *File) *Token {
 				failAt(p, "unclosed block comment")
 			}
 			p = p + 2 + q + 2
+			hasSpace = true
 			continue
 		}
 
@@ -473,12 +482,14 @@ func tokenize(file *File) *Token {
 		if input[p] == '\n' {
 			p++
 			atBol = true
+			hasSpace = false
 			continue
 		}
 
 		// Skip whitespace characters.
 		if unicode.IsSpace(rune(input[p])) {
 			p++
+			hasSpace = true
 			continue
 		}
 
