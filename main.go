@@ -14,7 +14,10 @@ var optHashHashHash bool
 var optO string
 var optMarch string
 
-var inputPath string
+var basefile string
+var outfile string
+
+var inputPaths []string
 var tmpfiles []string
 
 func usage(status int) {
@@ -22,7 +25,22 @@ func usage(status int) {
 	os.Exit(status)
 }
 
+func takeArg(arg string) bool {
+	return arg == "-o"
+}
+
 func parseArgs(args []string) {
+	// Make sure that all command line options that take an argument
+	// have an argument.
+	for i := 1; i < len(args); i++ {
+		if takeArg(args[i]) {
+			i++
+			if len(args[i]) == 0 {
+				usage(1)
+			}
+		}
+	}
+
 	for i := 1; i < len(args); i++ {
 		if args[i] == "-###" {
 			optHashHashHash = true
@@ -40,9 +58,6 @@ func parseArgs(args []string) {
 
 		if args[i] == "-o" {
 			i++
-			if len(args[i]) == 0 {
-				usage(1)
-			}
 			optO = args[i]
 			continue
 		}
@@ -62,14 +77,26 @@ func parseArgs(args []string) {
 			continue
 		}
 
+		if args[i] == "-cc1-input" {
+			i++
+			basefile = args[i]
+			continue
+		}
+
+		if args[i] == "-cc1-output" {
+			i++
+			outfile = args[i]
+			continue
+		}
+
 		if args[i][0] == '-' && len(args[i]) > 1 {
 			fail("unknown argument: %s", args[i])
 		}
 
-		inputPath = args[i]
+		inputPaths = append(inputPaths, args[i])
 	}
 
-	if len(inputPath) == 0 {
+	if len(inputPaths) == 0 {
 		fail("no input files")
 	}
 
@@ -147,11 +174,12 @@ func runCC1(args []string, input, output string) {
 	args = append(args, "-cc1")
 
 	if len(input) > 0 {
+		args = append(args, "-cc1-input")
 		args = append(args, input)
 	}
 
 	if len(output) > 0 {
-		args = append(args, "-o")
+		args = append(args, "-cc1-output")
 		args = append(args, output)
 	}
 
@@ -160,12 +188,12 @@ func runCC1(args []string, input, output string) {
 
 func cc1(target Arch) {
 	// Tokenize and parse.
-	tok := tokenizeFile(inputPath)
+	tok := tokenizeFile(basefile)
 	prog := parse(tok)
 
 	// Traverse the AST to emit assembly.
-	out := openFile(optO)
-	fmt.Fprintf(out, ".file 1 \"%s\"\n", inputPath)
+	out := openFile(outfile)
+	fmt.Fprintf(out, ".file 1 \"%s\"\n", basefile)
 	codegen(target, prog, out)
 }
 
@@ -193,23 +221,31 @@ func main() {
 		return
 	}
 
-	var output string
-	if len(optO) > 0 {
-		output = optO
-	} else if optS {
-		output = replaceExtn(inputPath, ".s")
-	} else {
-		output = replaceExtn(inputPath, ".o")
+	if len(inputPaths) > 1 && len(optO) > 0 {
+		fail("cannot specify '-o' with multiple files")
 	}
 
-	// If -S is given, assembly text is the final output.
-	if optS {
-		runCC1(os.Args, inputPath, output)
-		return
-	}
+	for i := 0; i < len(inputPaths); i++ {
+		input := inputPaths[i]
 
-	// Otherwise, run the assembler to assemble our output.
-	tmpfile := createTmpfile()
-	runCC1(os.Args, inputPath, tmpfile)
-	assemble(tmpfile, output)
+		var output string
+		if len(optO) > 0 {
+			output = optO
+		} else if optS {
+			output = replaceExtn(input, ".s")
+		} else {
+			output = replaceExtn(input, ".o")
+		}
+
+		// If -S is given, assembly text is the final output.
+		if optS {
+			runCC1(os.Args, input, output)
+			continue
+		}
+
+		// Otherwise, run the assembler to assemble our output.
+		tmpfile := createTmpfile()
+		runCC1(os.Args, input, tmpfile)
+		assemble(tmpfile, output)
+	}
 }
