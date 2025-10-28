@@ -4,6 +4,9 @@
 
 typedef unsigned short char16_t;
 
+typedef unsigned int char32_t;
+typedef int wchar_t;
+
 int main() {
   // c224
   ASSERT(4, sizeof(L'\0'));
@@ -91,6 +94,15 @@ int main() {
   ASSERT(u'α', ({ char16_t x[] = u"αβ"; x[0]; }));
   ASSERT(u'β', ({ char16_t x[] = u"αβ"; x[1]; }));
   ASSERT(6, ({ char16_t x[] = u"αβ"; sizeof(x); }));
+
+  // c233
+  ASSERT(U'🤔', ({ char32_t x[] = U"🤔x"; x[0]; }));
+  ASSERT(U'x', ({ char32_t x[] = U"🤔x"; x[1]; }));
+  ASSERT(12, ({ char32_t x[] = U"🤔x"; sizeof(x); }));
+
+  ASSERT(L'🤔', ({ wchar_t x[] = L"🤔x"; x[0]; }));
+  ASSERT(L'x', ({ wchar_t x[] = L"🤔x"; x[1]; }));
+  ASSERT(12, ({ wchar_t x[] = L"🤔x"; sizeof(x); }));
 
   printf("OK\n");
   return 0;

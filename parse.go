@@ -935,6 +935,12 @@ func stringInitializer(rest **Token, tok *Token, init *Initializer) {
 		for i := range l {
 			init.children[i].expr = NewNum(int64(str[i]), tok)
 		}
+	case 4:
+		buf := []byte(tok.str)
+		str := *(*[]uint32)(unsafe.Pointer(&buf))
+		for i := range l {
+			init.children[i].expr = NewNum(int64(str[i]), tok)
+		}
 	default:
 		unreachable()
 	}
