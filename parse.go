@@ -2216,6 +2216,7 @@ func funcall(rest **Token, tok *Token) *Node {
 // | "sizeof" "(" type-name ")"
 // | "sizeof" unary
 // | "_Alignof" "(" type-name ")"
+// | "_Alignof" unary
 // | ident func-args?
 // | str
 // | num
@@ -2248,11 +2249,16 @@ func primary(rest **Token, tok *Token) *Node {
 		return NewNum(int64(node.ty.size), tok)
 	}
 
-	if tok.equal("_Alignof") {
-		tok = tok.next.skip("(")
-		ty := typename(&tok, tok)
+	if tok.equal("_Alignof") && tok.next.equal("(") && isTypename(tok.next.next) {
+		ty := typename(&tok, tok.next.next)
 		*rest = tok.skip(")")
 		return NewNum(int64(ty.align), tok)
+	}
+
+	if tok.equal("_Alignof") {
+		node := unary(rest, tok.next)
+		node.addType()
+		return NewNum(int64(node.ty.align), tok)
 	}
 
 	if tok.kind == TK_IDENT {
