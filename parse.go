@@ -100,6 +100,7 @@ type Node struct {
 
 	// Function call
 	funcname string
+	functy   *Type
 	args     *Node
 
 	vara *Obj  // Used if kind == ND_VAR
@@ -1026,7 +1027,9 @@ func funcall(rest **Token, tok *Token) *Node {
 		failTok(start, "not a function")
 	}
 
-	ty := sc.vara.ty.returnTy
+	ty := sc.vara.ty
+	paramty := ty.params
+
 	head := Node{}
 	cur := &head
 
@@ -1034,16 +1037,28 @@ func funcall(rest **Token, tok *Token) *Node {
 		if cur != &head {
 			tok = tok.skip(",")
 		}
-		cur.next = assign(&tok, tok)
+
+		arg := assign(&tok, tok)
+		arg.addType()
+
+		if paramty != nil {
+			if paramty.kind == TY_STRUCT || paramty.kind == TY_UNION {
+				failTok(arg.tok, "passing struct or union is not supported yet")
+			}
+			arg = NewCast(arg, paramty)
+			paramty = paramty.next
+		}
+
+		cur.next = arg
 		cur = cur.next
-		cur.addType()
 	}
 
 	*rest = tok.skip(")")
 
 	node := NewNode(ND_FUNCALL, start)
 	node.funcname = start.lexeme
-	node.ty = ty
+	node.functy = ty
+	node.ty = ty.returnTy
 	node.args = head.next
 	return node
 }
