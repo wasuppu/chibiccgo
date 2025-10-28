@@ -761,6 +761,27 @@ func includeFile(tok *Token, path string, filenameTok *Token) *Token {
 	return tok2.append(tok)
 }
 
+// Read #line arguments
+func readLineMarker(rest **Token, tok *Token) {
+	start := tok
+	tok = preprocess(copyLine(rest, tok))
+
+	if tok.kind != TK_NUM || tok.ty.kind != TY_INT {
+		failTok(tok, "invalid line marker")
+	}
+	start.file.lineDelta = int(tok.val - int64(start.lineno))
+
+	tok = tok.next
+	if tok.kind == TK_EOF {
+		return
+	}
+
+	if tok.kind != TK_STR {
+		failTok(tok, "filename expected")
+	}
+	start.file.displayName = strings.Trim(tok.str, "\x00")
+}
+
 // Visit all tokens in `tok` while evaluating preprocessing
 // macros and directives.
 func preprocess2(tok *Token) *Token {
@@ -775,6 +796,8 @@ func preprocess2(tok *Token) *Token {
 
 		// Pass through if it is not a "#".
 		if !isHash(tok) {
+			tok.lineDelta = tok.file.lineDelta
+			tok.filename = tok.file.displayName
 			cur.next = tok
 			cur = cur.next
 			tok = tok.next
@@ -893,6 +916,11 @@ func preprocess2(tok *Token) *Token {
 			continue
 		}
 
+		if tok.equal("line") {
+			readLineMarker(&tok, tok.next)
+			continue
+		}
+
 		if tok.equal("error") {
 			failTok(tok, "error")
 		}
@@ -929,14 +957,15 @@ func fileMacro(tmpl *Token) *Token {
 	for tmpl.origin != nil {
 		tmpl = tmpl.origin
 	}
-	return newStrToken(tmpl.file.name, tmpl)
+	return newStrToken(tmpl.file.displayName, tmpl)
 }
 
 func lineMacro(tmpl *Token) *Token {
 	for tmpl.origin != nil {
 		tmpl = tmpl.origin
 	}
-	return newNumToken(tmpl.lineno, tmpl)
+	i := tmpl.lineno + tmpl.file.lineDelta
+	return newNumToken(i, tmpl)
 }
 
 // __COUNTER__ is expanded to serial values starting from 0.
@@ -1180,5 +1209,8 @@ func preprocess(tok *Token) *Token {
 	convertPPTokens(tok)
 	joinAdjacentStringLiterals(tok)
 
+	for t := tok; t != nil; t = t.next {
+		t.lineno += t.lineDelta
+	}
 	return tok
 }

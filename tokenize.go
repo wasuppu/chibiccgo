@@ -41,13 +41,18 @@ type File struct {
 	name     string
 	fileno   int
 	contents string
+
+	// For #line directive
+	displayName string
+	lineDelta   int
 }
 
 func newFile(name string, fileno int, contents string) *File {
 	return &File{
-		name:     name,
-		fileno:   fileno,
-		contents: contents,
+		name:        name,
+		displayName: name,
+		fileno:      fileno,
+		contents:    contents,
 	}
 }
 
@@ -66,21 +71,23 @@ const (
 
 // Token type
 type Token struct {
-	kind     TokenKind // Token kind
-	next     *Token    // Next token
-	val      int64     // If kind is TK_NUM, its value
-	fval     float64   // If kind is TK_NUM, its value
-	loc      int       // Token location
-	len      int       // Token length
-	lexeme   string    // Token lexeme value in string
-	ty       *Type     // Used if TK_NUM or TK_STR
-	str      string    // String literal contents including terminating '\0'
-	file     *File     // Source location
-	lineno   int       // Line number
-	atBol    bool      // True if this token is at beginning of line
-	hasSpace bool      // True if this token follows a space character
-	hideset  *Hideset  // For macro expansion
-	origin   *Token    // If this is expanded from a macro, the original token
+	kind      TokenKind // Token kind
+	next      *Token    // Next token
+	val       int64     // If kind is TK_NUM, its value
+	fval      float64   // If kind is TK_NUM, its value
+	loc       int       // Token location
+	len       int       // Token length
+	lexeme    string    // Token lexeme value in string
+	ty        *Type     // Used if TK_NUM or TK_STR
+	str       string    // String literal contents including terminating '\0'
+	file      *File     // Source location
+	filename  string    // Filename
+	lineno    int       // Line number
+	lineDelta int       // Line number
+	atBol     bool      // True if this token is at beginning of line
+	hasSpace  bool      // True if this token follows a space character
+	hideset   *Hideset  // For macro expansion
+	origin    *Token    // If this is expanded from a macro, the original token
 }
 
 // Create a new token.
@@ -90,6 +97,7 @@ func NewToken(kind TokenKind, pos int, len int, lexme string) *Token {
 		loc:      pos,
 		len:      len,
 		file:     currentFile,
+		filename: currentFile.displayName,
 		lexeme:   lexme,
 		atBol:    atBol,
 		hasSpace: hasSpace,
