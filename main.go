@@ -218,6 +218,11 @@ func parseArgs(args []string) {
 			continue
 		}
 
+		if strings.HasPrefix(args[i], "-l") {
+			inputPaths = append(inputPaths, args[i])
+			continue
+		}
+
 		if args[i] == "-cc1-input" {
 			i++
 			basefile = args[i]
@@ -672,6 +677,11 @@ func main() {
 
 	for i := 0; i < len(inputPaths); i++ {
 		input := inputPaths[i]
+
+		if strings.HasPrefix(input, "-l") {
+			ldArgs = append(ldArgs, input)
+			continue
+		}
 
 		var output string
 		if len(optO) > 0 {
