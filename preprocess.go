@@ -447,7 +447,6 @@ func readMacroArgOne(rest **Token, tok *Token, readRest bool) *MacroArg {
 }
 
 func readMacroArgs(rest **Token, tok *Token, params *MacroParam, vaArgsName string) *MacroArg {
-	start := tok
 	tok = tok.next.next
 
 	head := MacroArg{}
@@ -476,9 +475,6 @@ func readMacroArgs(rest **Token, tok *Token, params *MacroParam, vaArgsName stri
 		arg.name = vaArgsName
 		arg.isVaArgs = true
 		cur.next = arg
-		cur = cur.next
-	} else if pp != nil {
-		failTok(start, "too many arguments")
 	}
 
 	tok.skip(")")
@@ -1224,59 +1220,6 @@ func (a X64) initMacro() {
 	now := time.Now()
 	defineMacro("__DATE__", formatDate(now))
 	defineMacro("__TIME__", formatTime(now))
-}
-
-func (a RiscV) initMacro() {
-	// Define predefined macros
-	defineMacro("_LP64", "1")
-	defineMacro("__C99_MACRO_WITH_VA_ARGS", "1")
-	defineMacro("__ELF__", "1")
-	defineMacro("__LP64__", "1")
-	defineMacro("__SIZEOF_DOUBLE__", "8")
-	defineMacro("__SIZEOF_FLOAT__", "4")
-	defineMacro("__SIZEOF_INT__", "4")
-	defineMacro("__SIZEOF_LONG_DOUBLE__", "8")
-	defineMacro("__SIZEOF_LONG_LONG__", "8")
-	defineMacro("__SIZEOF_LONG__", "8")
-	defineMacro("__SIZEOF_POINTER__", "8")
-	defineMacro("__SIZEOF_PTRDIFF_T__", "8")
-	defineMacro("__SIZEOF_SHORT__", "2")
-	defineMacro("__SIZEOF_SIZE_T__", "8")
-	defineMacro("__SIZE_TYPE__", "unsigned long")
-	defineMacro("__STDC_HOSTED__", "1")
-	defineMacro("__STDC_NO_ATOMICS__", "1")
-	defineMacro("__STDC_NO_COMPLEX__", "1")
-	defineMacro("__STDC_NO_THREADS__", "1")
-	defineMacro("__STDC_NO_VLA__", "1")
-	defineMacro("__STDC_VERSION__", "201112L")
-	defineMacro("__STDC__", "1")
-	defineMacro("__USER_LABEL_PREFIX__", "")
-	defineMacro("__alignof__", "_Alignof")
-	defineMacro("__rvcc__", "1")
-	defineMacro("__const__", "const")
-	defineMacro("__gnu_linux__", "1")
-	defineMacro("__inline__", "inline")
-	defineMacro("__linux", "1")
-	defineMacro("__linux__", "1")
-	defineMacro("__signed__", "signed")
-	defineMacro("__typeof__", "typeof")
-	defineMacro("__unix", "1")
-	defineMacro("__unix__", "1")
-	defineMacro("__volatile__", "volatile")
-	defineMacro("linux", "1")
-	defineMacro("unix", "1")
-	defineMacro("__riscv_mul", "1")
-	defineMacro("__riscv_muldiv", "1")
-	defineMacro("__riscv_fdiv", "1")
-	defineMacro("__riscv_xlen", "64")
-	defineMacro("__riscv", "1")
-	defineMacro("__riscv64", "1")
-	defineMacro("__riscv_div", "1")
-	defineMacro("__riscv_float_abi_double", "1")
-	defineMacro("__riscv_flen", "64")
-
-	addBuiltin("__FILE__", fileMacro)
-	addBuiltin("__LINE__", lineMacro)
 }
 
 type StringKind int

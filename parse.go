@@ -36,9 +36,7 @@ var builtinAlloca *Obj
 // can be nested (e.g. `int x[2][2] = {{1, 2}, {3, 4}}`), this struct
 // is a tree data structure.
 type Initializer struct {
-	next       *Initializer
 	ty         *Type
-	tok        *Token
 	isFlexible bool
 
 	// If it's not an aggregate type and has an initializer,
@@ -82,15 +80,11 @@ type Obj struct {
 	next    *Obj
 	name    string // Variable name
 	ty      *Type  // Type
-	tok     *Token // representative token
 	isLocal bool   // local or global/function
 	align   int    // alignment
 
 	// Local variable
 	offset int
-
-	// struct type for riscv
-	isHalfByStack bool
 
 	// Global variable or function
 	isFunction   bool
@@ -235,10 +229,6 @@ type Node struct {
 	casAddr *Node
 	casOld  *Node
 	casNew  *Node
-
-	// Atomic op= operators
-	atomicAddr *Obj
-	atomicExpr *Node
 
 	// Variable
 	vara *Obj
@@ -2389,7 +2379,6 @@ func toAssign(binary *Node) *Node {
 		cur.next = loop
 		cur = cur.next
 		cur.next = NewUnary(ND_EXPR_STMT, NewVarNode(new, tok), tok)
-		cur = cur.next
 
 		node := NewNode(ND_STMT_EXPR, tok)
 		node.body = head.next
@@ -3382,20 +3371,18 @@ func primary(rest **Token, tok *Token) *Node {
 		}
 	}
 
-	if ArchName != "riscv" {
-		if tok.equal("__builtin_reg_class") {
-			tok = tok.next.skip("(")
-			ty := typename(&tok, tok)
-			*rest = tok.skip(")")
+	if tok.equal("__builtin_reg_class") {
+		tok = tok.next.skip("(")
+		ty := typename(&tok, tok)
+		*rest = tok.skip(")")
 
-			if ty.isInteger() || ty.kind == TY_PTR {
-				return NewNum(0, start)
-			}
-			if ty.isFlonum() {
-				return NewNum(1, start)
-			}
-			return NewNum(2, start)
+		if ty.isInteger() || ty.kind == TY_PTR {
+			return NewNum(0, start)
 		}
+		if ty.isFlonum() {
+			return NewNum(1, start)
+		}
+		return NewNum(2, start)
 	}
 
 	if tok.equal("__builtin_compare_and_swap") {
@@ -3602,14 +3589,7 @@ func function(tok *Token, basety *Type, attr *VarAttr) *Token {
 
 	fn.params = locals
 	if ty.isVariadic {
-		switch ArchName {
-		case "x64":
-			fn.vaArea = NewLVar("__va_area__", arrayOf(tyChar, 136))
-		case "riscv":
-			fn.vaArea = NewLVar("__va_area__", arrayOf(tyChar, 64))
-		default:
-			fail("invalid arch:", ArchName)
-		}
+		fn.vaArea = NewLVar("__va_area__", arrayOf(tyChar, 136))
 	}
 	fn.allocaBottom = NewLVar("__alloca_size__", pointerTo(tyChar))
 

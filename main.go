@@ -50,8 +50,6 @@ var inputPaths []string
 var tmpfiles []string
 var includePaths []string
 
-var rvpath = "/opt/riscv-linux"
-
 func init() {
 	for i := range kws {
 		hashmapPut(&keymap, kws[i], 1)
@@ -90,19 +88,6 @@ func (a X64) addDefaultIncludePaths(argv0 string) {
 
 	// Keep a copy of the standard include paths for -MMD option.
 	stdIncludePaths = append(stdIncludePaths, includePaths...)
-}
-
-func (a RiscV) addDefaultIncludePaths(argv0 string) {
-	// We expect that chibicc-specific include files are installed
-	// to ./include relative to argv[0].
-	includePaths = append(includePaths, filepath.Join(filepath.Dir(argv0), "include"))
-
-	// Add standard include paths.
-	includePaths = append(includePaths, "/usr/local/include")
-	includePaths = append(includePaths, "/usr/include/riscv64-linux-gnu")
-	includePaths = append(includePaths, filepath.Join(rvpath, "riscv64-unknown-linux-gnu/include"))
-	includePaths = append(includePaths, "/usr/include")
-	includePaths = append(includePaths, filepath.Join(rvpath, "sysroot/usr/include"))
 }
 
 func define(str string) {
@@ -677,11 +662,6 @@ func (a X64) assemble(input, output string) {
 	runSubprocess(cmd)
 }
 
-func (a RiscV) assemble(input, output string) {
-	cmd := []string{"riscv64-unknown-linux-gnu-as", "-c", input, "-o", output}
-	runSubprocess(cmd)
-}
-
 func findFile(pattern string) string {
 	matches, err := filepath.Glob(pattern)
 	if err != nil {
@@ -715,47 +695,11 @@ func (a X64) findLibPath() string {
 	return ""
 }
 
-func (a RiscV) findLibPath() string {
-	paths := []string{
-		"/usr/lib/riscv64-linux-gnu/crti.o",
-		"/usr/lib64/crti.o",
-		filepath.Join(rvpath, "sysroot/usr/lib/crti.o"),
-	}
-
-	for _, path := range paths {
-		if fileExists(path) {
-			return filepath.Dir(path)
-		}
-	}
-
-	fail("library path is not found")
-	return ""
-}
-
 func (a X64) findGCCLibPath() string {
 	paths := []string{
 		"/usr/lib/gcc/x86_64-linux-gnu/*/crtbegin.o",
 		"/usr/lib/gcc/x86_64-pc-linux-gnu/*/crtbegin.o", // For Gentoo
 		"/usr/lib/gcc/x86_64-redhat-linux/*/crtbegin.o", // For Fedora
-	}
-
-	for i := range paths {
-		path := findFile(paths[i])
-		if len(path) > 0 {
-			return filepath.Dir(path)
-		}
-	}
-
-	fail("gcc library path is not found")
-	return ""
-}
-
-func (a RiscV) findGCCLibPath() string {
-	paths := []string{
-		"/usr/lib/gcc/riscv64-linux-gnu/*/crtbegin.o",
-		"/usr/lib/gcc/riscv64-pc-linux-gnu/*/crtbegin.o", // For Gentoo
-		"/usr/lib/gcc/riscv64-redhat-linux/*/crtbegin.o", // For Fedora
-		filepath.Join(rvpath, "lib/gcc/riscv64-unknown-linux-gnu/*/crtbegin.o"),
 	}
 
 	for i := range paths {
@@ -831,48 +775,6 @@ func (a X64) runLinker(inputs []string, output string) {
 		arr = append(arr, fmt.Sprintf("%s/crtend.o", gccLibpath))
 	}
 
-	arr = append(arr, fmt.Sprintf("%s/crtn.o", libpath))
-
-	runSubprocess(arr)
-}
-
-func (a RiscV) runLinker(inputs []string, output string) {
-	var arr []string
-
-	arr = append(arr, "riscv64-unknown-linux-gnu-ld")
-	arr = append(arr, "-o")
-	arr = append(arr, output)
-	arr = append(arr, "-m")
-	arr = append(arr, "elf64lriscv")
-	arr = append(arr, "-dynamic-linker")
-	arr = append(arr, filepath.Join(rvpath, "sysroot/lib/ld-linux-riscv64-lp64d.so.1"))
-
-	libpath := a.findLibPath()
-	gccLibpath := a.findGCCLibPath()
-
-	arr = append(arr, fmt.Sprintf("%s/crt1.o", libpath))
-	arr = append(arr, fmt.Sprintf("%s/crti.o", libpath))
-	arr = append(arr, fmt.Sprintf("%s/crtbegin.o", gccLibpath))
-	arr = append(arr, fmt.Sprintf("-L%s", gccLibpath))
-	arr = append(arr, fmt.Sprintf("-L%s", libpath))
-	arr = append(arr, fmt.Sprintf("-L%s/..", libpath))
-
-	arr = append(arr, fmt.Sprintf("-L%s/sysroot/usr/lib64", rvpath))
-	arr = append(arr, fmt.Sprintf("-L%s/sysroot/lib64", rvpath))
-	arr = append(arr, fmt.Sprintf("-L%s/sysroot/usr/lib/riscv64-linux-gnu", rvpath))
-	arr = append(arr, fmt.Sprintf("-L%s/sysroot/usr/lib/riscv64-pc-linux-gnu", rvpath))
-	arr = append(arr, fmt.Sprintf("-L%s/sysroot/usr/lib/riscv64-redhat-linux", rvpath))
-	arr = append(arr, fmt.Sprintf("-L%s/sysroot/usr/lib", rvpath))
-	arr = append(arr, fmt.Sprintf("-L%s/sysroot//lib", rvpath))
-
-	arr = append(arr, inputs...)
-
-	arr = append(arr, "-lc")
-	arr = append(arr, "-lgcc")
-	arr = append(arr, "--as-needed")
-	arr = append(arr, "-lgcc_s")
-	arr = append(arr, "--no-as-needed")
-	arr = append(arr, fmt.Sprintf("%s/crtend.o", gccLibpath))
 	arr = append(arr, fmt.Sprintf("%s/crtn.o", libpath))
 
 	runSubprocess(arr)

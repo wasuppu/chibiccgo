@@ -1,72 +1,50 @@
-TEST_DIR = test/$(ARCH)
-TEST_SRCS := $(wildcard test/*.c)
-TESTS := $(patsubst test/%.c,$(TEST_DIR)/%.exe,$(TEST_SRCS))
+CFLAGS=-std=c11 -g -fno-common -Wall -Wno-switch
 
-ifeq ($(ARCH),riscv)
-    CC = riscv64-unknown-linux-gnu-gcc
-    RUN = $(RISCV)/bin/qemu-riscv64 -L /opt/riscv-linux/sysroot
-	FLAG = -static
-	INCLUDE = include2
-else
-    CC = gcc
-    RUN =
-	FLAG =
-	INCLUDE = include
-endif
+SRCS=$(wildcard *.go)
+SCDIR = ./source
+SCSRCS=$(wildcard $(SCDIR)/*.c)
+SCOBJS=$(notdir $(SCSRCS:.c=.o))
 
-chibicc:
-	go build -o chibicc *.go
+TEST_SRCS=$(wildcard test/*.c)
+TESTS=$(TEST_SRCS:.c=.exe)
 
 # Stage 1
 
-$(TEST_DIR)/%.exe: chibicc test/%.c
-	mkdir -p $(TEST_DIR)
-	./chibicc -march=$(ARCH) -I$(INCLUDE) -Itest -c -o $(TEST_DIR)/$*.o test/$*.c
-	$(CC) $(FLAG) -pthread -o $@ $(TEST_DIR)/$*.o -xc test/common
+chibicc: $(SRCS)
+	go build -o $@ $^
+
+test/%.exe: chibicc test/%.c
+	./chibicc -Iinclude -Itest -c -o test/$*.o test/$*.c
+	$(CC) -pthread -o $@ test/$*.o -xc test/common
 
 test: $(TESTS)
-	for i in $^; do echo $$i; $(RUN) ./$$i || exit 1; echo; done
+	for i in $^; do echo $$i; ./$$i || exit 1; echo; done
 	test/driver.sh ./chibicc
+
+testall: test test-stage2
 
 # Stage 2
 
-CFLAGS=-std=c11 -g -fno-common -Wall -Wno-switch
-SCSRCS=$(wildcard ./source/*.c)
-SCOBJS=$(notdir $(SCSRCS:.c=.o))
-
 stage2/chibicc: $(SCOBJS:%=stage2/%)
-	$(CC) $(CFLAGS) $(FLAG) -o $@ $^ $(LDFLAGS)
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
-stage2/%.o: chibicc ./source/%.c
+stage2/%.o: chibicc $(SCDIR)/%.c
 	mkdir -p stage2/test
-	./chibicc -march=$(ARCH) -c -o $(@D)/$*.o ./source/$*.c
+	./chibicc -c -o $(@D)/$*.o $(SCDIR)/$*.c
 
 stage2/test/%.exe: stage2/chibicc test/%.c
 	mkdir -p stage2/test
-	$(RUN) ./stage2/chibicc -Iinclude -Itest -c -o stage2/test/$*.o test/$*.c
-	gcc -pthread -o $@ stage2/test/$*.o -xc test/common
+	./stage2/chibicc -Iinclude -Itest -c -o stage2/test/$*.o test/$*.c
+	$(CC) -pthread -o $@ stage2/test/$*.o -xc test/common
 
-test-stage2: $(patsubst $(TEST_DIR)/%.exe,stage2/test/%.exe,$(TESTS))
+test-stage2: $(TESTS:test/%=stage2/test/%)
 	for i in $^; do echo $$i; ./$$i || exit 1; echo; done
 	test/driver.sh ./stage2/chibicc
 
-x64:
-	$(MAKE) clean
-	$(MAKE) test ARCH=x64
-	$(MAKE) test-stage2 ARCH=x64
-
-# riscv:
-# 	$(MAKE) clean
-# 	$(MAKE) test ARCH=riscv
-# 	$(MAKE) stage2/chibicc ARCH=riscv
-# 	$(MAKE) test-stage2 ARCH=riscv
-
-# Stage 2
-
-# testall: x64 riscv
+# Misc.
 
 clean:
-	rm -rf chibicc tmp* test/x64 test/riscv stage2
+	rm -rf chibicc tmp* $(TESTS) test/*.s test/*.exe stage2 thirdparty
 	find * -type f '(' -name '*~' -o -name '*.o' ')' -exec rm {} ';'
 
-.PHONY: x64 riscv test testall clean
+.PHONY: test clean test-stage2
