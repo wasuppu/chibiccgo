@@ -96,8 +96,9 @@ type Obj struct {
 	isStatic     bool
 
 	// Global variable
-	initData string
-	rel      *Relocation
+	isTentative bool
+	initData    string
+	rel         *Relocation
 
 	// Function
 	isInline  bool
@@ -3279,6 +3280,8 @@ func globalVariable(tok *Token, basety *Type, attr *VarAttr) *Token {
 
 		if tok.equal("=") {
 			gvarInitializer(&tok, tok.next, vara)
+		} else if !attr.isExtern {
+			vara.isTentative = true
 		}
 	}
 	return tok
@@ -3294,6 +3297,38 @@ func isFunction(tok *Token) bool {
 	dummy := Type{}
 	ty := declarator(&tok, tok, &dummy)
 	return ty.kind == TY_FUNC
+}
+
+// Remove redundant tentative definitions.
+func scanGlobals() {
+	head := Obj{}
+	cur := &head
+
+	for vara := globals; vara != nil; vara = vara.next {
+		if !vara.isTentative {
+			cur.next = vara
+			cur = cur.next
+			continue
+		}
+
+		// Find another definition of the same identifier.
+		vara2 := globals
+		for ; vara2 != nil; vara2 = vara2.next {
+			if vara != vara2 && vara2.isDefinition && vara.name == vara2.name {
+				break
+			}
+		}
+
+		// If there's another definition, the tentative definition
+		// is redundant
+		if vara2 == nil {
+			cur.next = vara
+			cur = cur.next
+		}
+	}
+
+	cur.next = nil
+	globals = head.next
 }
 
 // program = (typedef | function-definition | global-variable)*
@@ -3326,5 +3361,7 @@ func parse(tok *Token) *Obj {
 		}
 	}
 
+	// Remove redundant tentative definitions.
+	scanGlobals()
 	return globals
 }

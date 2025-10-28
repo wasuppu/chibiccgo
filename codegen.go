@@ -1360,6 +1360,11 @@ func (a X64) emitData(prog *Obj) {
 		}
 		println("  .align %d", align)
 
+		if vara.isTentative {
+			println("  .comm %s, %d, %d", vara.name, vara.ty.size, align)
+			continue
+		}
+
 		if len(vara.initData) > 0 {
 			println("  .data")
 			println("%s:", vara.name)
