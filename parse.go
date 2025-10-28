@@ -977,7 +977,7 @@ func arrayDesignator(rest **Token, tok *Token, ty *Type) int {
 	return i
 }
 
-// designation = ("[" const-expr "]")* "=" initializer
+// designation = ("[" const-expr "]")* "="? initializer
 func designation(rest **Token, tok *Token, init *Initializer) {
 	if tok.equal("[") {
 		if init.ty.kind != TY_ARRAY {
@@ -989,7 +989,9 @@ func designation(rest **Token, tok *Token, init *Initializer) {
 		return
 	}
 
-	tok = tok.skip("=")
+	if tok.equal("=") {
+		tok = tok.next
+	}
 	initializer2(rest, tok, init)
 }
 

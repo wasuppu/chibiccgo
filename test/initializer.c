@@ -234,6 +234,10 @@ int main() {
   ASSERT(0, strcmp(g65.b, "oo"));
   ASSERT(0, strcmp(g66.b, "oobar"));
 
+  // c241
+  ASSERT(7, ((int[10]){ [3] 7 })[3]);
+  ASSERT(0, ((int[10]){ [3] 7 })[4]);
+
   printf("OK\n");
   return 0;
 }
