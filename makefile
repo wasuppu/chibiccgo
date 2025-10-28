@@ -19,8 +19,8 @@ chibicc:
 
 $(TEST_DIR)/%.exe: chibicc test/%.c
 	mkdir -p $(TEST_DIR)
-	$(CC) -o- -E -P -C test/$*.c | ./chibicc -march=$(ARCH) -o $(TEST_DIR)/$*.s -
-	$(CC) $(FLAG) -o $@ $(TEST_DIR)/$*.s -xc test/common
+	$(CC) -o- -E -P -C test/$*.c | ./chibicc -march=$(ARCH) -o $(TEST_DIR)/$*.o -
+	$(CC) $(FLAG) -o $@ $(TEST_DIR)/$*.o -xc test/common
 
 test: $(TESTS)
 	for i in $^; do echo $$i; $(RUN) ./$$i || exit 1; echo; done
@@ -35,18 +35,15 @@ SCOBJS=$(notdir $(SCSRCS:.c=.o))
 stage2/chibicc: $(SCOBJS:%=stage2/%)
 	$(CC) $(CFLAGS) $(FLAG) -o $@ $^ $(LDFLAGS)
 
-stage2/%.s: chibicc self.py ./source/%.c
+stage2/%.o: chibicc self.py ./source/%.c
 	mkdir -p stage2/test
 	./self.py ./source/chibicc.h ./source/$*.c > stage2/$*.c
-	./chibicc -march=$(ARCH) -o stage2/$*.s stage2/$*.c
-
-stage2/%.o: stage2/%.s
-	$(CC) -c stage2/$*.s -o stage2/$*.o
+	./chibicc -march=$(ARCH) -o stage2/$*.o stage2/$*.c
 
 stage2/test/%.exe: stage2/chibicc test/%.c
 	mkdir -p stage2/test
-	gcc -o- -E -P -C test/$*.c | $(RUN) ./stage2/chibicc -o stage2/test/$*.s -
-	gcc -o $@ stage2/test/$*.s -xc test/common
+	gcc -o- -E -P -C test/$*.c | $(RUN) ./stage2/chibicc -o stage2/test/$*.o -
+	gcc -o $@ stage2/test/$*.o -xc test/common
 
 test-stage2: $(patsubst $(TEST_DIR)/%.exe,stage2/test/%.exe,$(TESTS))
 	for i in $^; do echo $$i; ./$$i || exit 1; echo; done

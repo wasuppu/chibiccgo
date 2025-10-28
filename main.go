@@ -4,15 +4,18 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 )
 
+var optS bool
 var optCC1 bool
 var optHashHashHash bool
 var optO string
 var optMarch string
 
 var inputPath string
+var tmpfiles []string
 
 func usage(status int) {
 	fmt.Fprintf(os.Stderr, "chibicc [ -o <path> ] <file>\n")
@@ -54,6 +57,11 @@ func parseArgs(args []string) {
 			continue
 		}
 
+		if args[i] == "-S" {
+			optS = true
+			continue
+		}
+
 		if args[i][0] == '-' && len(args[i]) > 1 {
 			fail("unknown argument: %s", args[i])
 		}
@@ -82,6 +90,34 @@ func openFile(path string) *os.File {
 	return out
 }
 
+// Replace file extension
+func replaceExtn(tmpl string, extn string) string {
+	filename := filepath.Base(tmpl)
+	dot := strings.LastIndexByte(filename, '.')
+	if dot != -1 {
+		filename = filename[:dot]
+	}
+	return filename + extn
+}
+
+func cleanup() {
+	for i := range tmpfiles {
+		os.Remove(tmpfiles[i])
+	}
+}
+
+func createTmpfile() string {
+	file, err := os.CreateTemp("", "chibicc-")
+	if err != nil {
+		panic("mkstemp failed: " + err.Error())
+	}
+	defer file.Close()
+
+	path := file.Name()
+	tmpfiles = append(tmpfiles, path)
+	return path
+}
+
 func runSubprocess(args []string) {
 	// If -### is given, dump the subprocess's command line.
 	if optHashHashHash {
@@ -107,13 +143,22 @@ func runSubprocess(args []string) {
 	}
 }
 
-func runCC1(args []string) {
-	runSubprocess(append(args, "-cc1"))
+func runCC1(args []string, input, output string) {
+	args = append(args, "-cc1")
+
+	if len(input) > 0 {
+		args = append(args, input)
+	}
+
+	if len(output) > 0 {
+		args = append(args, "-o")
+		args = append(args, output)
+	}
+
+	runSubprocess(args)
 }
 
-func cc1() {
-	target := chooseArch(optMarch)
-
+func cc1(target Arch) {
 	// Tokenize and parse.
 	tok := tokenizeFile(inputPath)
 	prog := parse(tok)
@@ -124,13 +169,47 @@ func cc1() {
 	codegen(target, prog, out)
 }
 
+func assemble(input, output string) {
+	var cmd []string
+	switch ArchName {
+	case "x64":
+		cmd = []string{"as", "-c", input, "-o", output}
+	case "riscv":
+		cmd = []string{"riscv64-unknown-linux-gnu-as", "-c", input, "-o", output}
+	default:
+		fail("invalid arch:", ArchName)
+	}
+	runSubprocess(cmd)
+}
+
 func main() {
+	defer cleanup()
+
 	parseArgs(os.Args)
+	target := chooseArch(optMarch)
 
 	if optCC1 {
-		cc1()
+		cc1(target)
 		return
 	}
 
-	runCC1(os.Args)
+	var output string
+	if len(optO) > 0 {
+		output = optO
+	} else if optS {
+		output = replaceExtn(inputPath, ".s")
+	} else {
+		output = replaceExtn(inputPath, ".o")
+	}
+
+	// If -S is given, assembly text is the final output.
+	if optS {
+		runCC1(os.Args, inputPath, output)
+		return
+	}
+
+	// Otherwise, run the assembler to assemble our output.
+	tmpfile := createTmpfile()
+	runCC1(os.Args, inputPath, tmpfile)
+	assemble(tmpfile, output)
 }
