@@ -45,9 +45,10 @@ type Initializer struct {
 
 // For local variable initializer.
 type InitDesg struct {
-	next *InitDesg
-	idx  int
-	vara *Obj
+	next   *InitDesg
+	idx    int
+	member *Member
+	vara   *Obj
 }
 
 // Struct member
@@ -55,6 +56,7 @@ type Member struct {
 	next   *Member
 	ty     *Type
 	name   *Token
+	idx    int
 	offset int
 }
 
@@ -327,6 +329,21 @@ func NewInitializer(ty *Type, isFlexible bool) *Initializer {
 		for i := range ty.arrayLen {
 			init.children[i] = NewInitializer(ty.base, false)
 		}
+		return init
+	}
+
+	if ty.kind == TY_STRUCT {
+		// Count the number of struct members.
+		len := 0
+		for mem := ty.members; mem != nil; mem = mem.next {
+			len++
+		}
+
+		init.children = make([]*Initializer, len)
+		for mem := ty.members; mem != nil; mem = mem.next {
+			init.children[mem.idx] = NewInitializer(mem.ty, false)
+		}
+		return init
 	}
 
 	return init
@@ -758,7 +775,28 @@ func arrayInitializer(rest **Token, tok *Token, init *Initializer) {
 	}
 }
 
-// initializer = string-initializer | array-initializer | assign
+// struct-initializer = "{" initializer ("," initializer)* "}"
+func structInitializer(rest **Token, tok *Token, init *Initializer) {
+	tok = tok.skip("{")
+
+	mem := init.ty.members
+
+	for !consume(rest, tok, "}") {
+		if mem != init.ty.members {
+			tok = tok.skip(",")
+		}
+
+		if mem != nil {
+			initializer2(&tok, tok, init.children[mem.idx])
+			mem = mem.next
+		} else {
+			tok = skipExcessElement(tok)
+		}
+	}
+}
+
+// initializer = string-initializer | array-initializer
+// | struct-initializer | assign
 func initializer2(rest **Token, tok *Token, init *Initializer) {
 	if init.ty.kind == TY_ARRAY && tok.kind == TK_STR {
 		stringInitializer(rest, tok, init)
@@ -767,6 +805,11 @@ func initializer2(rest **Token, tok *Token, init *Initializer) {
 
 	if init.ty.kind == TY_ARRAY {
 		arrayInitializer(rest, tok, init)
+		return
+	}
+
+	if init.ty.kind == TY_STRUCT {
+		structInitializer(rest, tok, init)
 		return
 	}
 
@@ -785,6 +828,12 @@ func initDesgExpr(desg *InitDesg, tok *Token) *Node {
 		return NewVarNode(desg.vara, tok)
 	}
 
+	if desg.member != nil {
+		node := NewUnary(ND_MEMBER, initDesgExpr(desg.next, tok), tok)
+		node.member = desg.member
+		return node
+	}
+
 	lhs := initDesgExpr(desg.next, tok)
 	rhs := NewNum(int64(desg.idx), tok)
 	return NewUnary(ND_DEREF, newAdd(lhs, rhs, tok), tok)
@@ -796,6 +845,17 @@ func createLVarInit(init *Initializer, ty *Type, desg *InitDesg, tok *Token) *No
 		for i := range ty.arrayLen {
 			desg2 := InitDesg{next: desg, idx: i}
 			rhs := createLVarInit(init.children[i], ty.base, &desg2, tok)
+			node = NewBinary(ND_COMMA, node, rhs, tok)
+		}
+		return node
+	}
+
+	if ty.kind == TY_STRUCT {
+		node := NewNode(ND_NULL_EXPR, tok)
+
+		for mem := ty.members; mem != nil; mem = mem.next {
+			desg2 := InitDesg{next: desg, idx: 0, member: mem}
+			rhs := createLVarInit(init.children[mem.idx], mem.ty, &desg2, tok)
 			node = NewBinary(ND_COMMA, node, rhs, tok)
 		}
 		return node
@@ -821,7 +881,7 @@ func createLVarInit(init *Initializer, ty *Type, desg *InitDesg, tok *Token) *No
 //	x[1][1] = 9;
 func lvarInitializer(rest **Token, tok *Token, vara *Obj) *Node {
 	init := initializer(rest, tok, vara.ty, &vara.ty)
-	desg := InitDesg{nil, 0, vara}
+	desg := InitDesg{nil, 0, nil, vara}
 
 	// If a partial initializer list is given, the standard requires
 	// that unspecified elements are set to 0. Here, we simply
@@ -1593,20 +1653,23 @@ func unary(rest **Token, tok *Token) *Node {
 func structMembers(rest **Token, tok *Token, ty *Type) {
 	head := Member{}
 	cur := &head
+	idx := 0
 
 	for !tok.equal("}") {
 		basety := declspec(&tok, tok, nil)
-		i := 0
+		first := true
 
 		for !consume(&tok, tok, ";") {
-			if i != 0 {
+			if !first {
 				tok = tok.skip(",")
 			}
-			i++
+			first = false
 
 			mem := &Member{}
 			mem.ty = declarator(&tok, tok, basety)
 			mem.name = mem.ty.name
+			mem.idx = idx
+			idx++
 			cur.next = mem
 			cur = cur.next
 		}
