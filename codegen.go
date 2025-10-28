@@ -965,11 +965,12 @@ func emitData(prog *Obj) {
 			continue
 		}
 
-		println("  .data")
 		println("  .globl %s", vara.name)
-		println("%s:", vara.name)
 
 		if len(vara.initData) > 0 {
+			println("  .data")
+			println("%s:", vara.name)
+
 			rel := vara.rel
 			pos := 0
 			for pos < vara.ty.size {
@@ -982,9 +983,12 @@ func emitData(prog *Obj) {
 					pos++
 				}
 			}
-		} else {
-			println("  .zero %d", vara.ty.size)
+			continue
 		}
+
+		println("  .bss")
+		println("%s:", vara.name)
+		println("  .zero %d", vara.ty.size)
 	}
 }
 
