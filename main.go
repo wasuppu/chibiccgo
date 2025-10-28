@@ -249,6 +249,11 @@ func parseArgs(args []string) {
 			continue
 		}
 
+		if args[i] == "-hashmap-test" {
+			hashmapTest()
+			os.Exit(0)
+		}
+
 		// These options are ignored for now.
 		if strings.HasPrefix(args[i], "-O") ||
 			strings.HasPrefix(args[i], "-W") ||
