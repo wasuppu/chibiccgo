@@ -56,8 +56,12 @@ func (a X64) pop(arg string) {
 // Compute the absolute address of a given node.
 // It's an error if a given node does not reside in memory.
 func (a X64) genAddr(node *Node) {
-	if node.kind == ND_VAR {
+	switch node.kind {
+	case ND_VAR:
 		fmt.Printf("  lea %d(%%rbp), %%rax\n", node.vara.offset)
+		return
+	case ND_DEREF:
+		a.genExpr(node.lhs)
 		return
 	}
 
@@ -77,6 +81,13 @@ func (a X64) genExpr(node *Node) {
 	case ND_VAR:
 		a.genAddr(node)
 		fmt.Printf("  mov (%%rax), %%rax\n")
+		return
+	case ND_DEREF:
+		a.genExpr(node.lhs)
+		fmt.Printf("  mov (%%rax), %%rax\n")
+		return
+	case ND_ADDR:
+		a.genAddr(node.lhs)
 		return
 	case ND_ASSIGN:
 		a.genAddr(node.lhs)
@@ -213,8 +224,12 @@ func (a RiscV) pop(arg string) {
 // Compute the absolute address of a given node.
 // It's an error if a given node does not reside in memory.
 func (a RiscV) genAddr(node *Node) {
-	if node.kind == ND_VAR {
+	switch node.kind {
+	case ND_VAR:
 		fmt.Printf("  addi a0, fp, %d\n", node.vara.offset)
+		return
+	case ND_DEREF:
+		a.genExpr(node.lhs)
 		return
 	}
 
@@ -234,6 +249,13 @@ func (a RiscV) genExpr(node *Node) {
 	case ND_VAR:
 		a.genAddr(node)
 		fmt.Printf("  ld a0, 0(a0)\n")
+		return
+	case ND_DEREF:
+		a.genExpr(node.lhs)
+		fmt.Printf("  ld a0, 0(a0)\n")
+		return
+	case ND_ADDR:
+		a.genAddr(node.lhs)
 		return
 	case ND_ASSIGN:
 		a.genAddr(node.lhs)

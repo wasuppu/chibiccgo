@@ -32,6 +32,8 @@ const (
 	ND_LT                        // <
 	ND_LE                        // <=
 	ND_ASSIGN                    // =
+	ND_ADDR                      // unary &
+	ND_DEREF                     // unary *
 	ND_RETURN                    // "return"
 	ND_IF                        // "if"
 	ND_FOR                       // "for"
@@ -324,7 +326,7 @@ func mul(rest **Token, tok *Token) *Node {
 	}
 }
 
-// unary = ("+" | "-") unary
+// unary = ("+" | "-" | "*" | "&") unary
 // | primary
 func unary(rest **Token, tok *Token) *Node {
 	if tok.equal("+") {
@@ -333,6 +335,14 @@ func unary(rest **Token, tok *Token) *Node {
 
 	if tok.equal("-") {
 		return NewUnary(ND_NEG, unary(rest, tok.next), tok)
+	}
+
+	if tok.equal("&") {
+		return NewUnary(ND_ADDR, unary(rest, tok.next), tok)
+	}
+
+	if tok.equal("*") {
+		return NewUnary(ND_DEREF, unary(rest, tok.next), tok)
 	}
 
 	return primary(rest, tok)
