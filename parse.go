@@ -511,7 +511,7 @@ func mul(rest **Token, tok *Token) *Node {
 }
 
 // unary = ("+" | "-" | "*" | "&") unary
-// | primary
+// | postfix
 func unary(rest **Token, tok *Token) *Node {
 	if tok.equal("+") {
 		return unary(rest, tok.next)
@@ -529,7 +529,23 @@ func unary(rest **Token, tok *Token) *Node {
 		return NewUnary(ND_DEREF, unary(rest, tok.next), tok)
 	}
 
-	return primary(rest, tok)
+	return postfix(rest, tok)
+}
+
+// postfix = primary ("[" expr "]")*
+func postfix(rest **Token, tok *Token) *Node {
+	node := primary(&tok, tok)
+
+	for tok.equal("[") {
+		// x[y] is short for *(x+y)
+		start := tok
+		idx := expr(&tok, tok.next)
+		tok = tok.skip("]")
+		node = NewUnary(ND_DEREF, newAdd(node, idx, start), start)
+	}
+
+	*rest = tok
+	return node
 }
 
 // funcall = ident "(" (assign ("," assign)*)? ")"
