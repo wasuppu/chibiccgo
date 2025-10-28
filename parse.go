@@ -635,9 +635,27 @@ func typename(rest **Token, tok *Token) *Type {
 	return abstractDeclarator(rest, tok, ty)
 }
 
+func isEnd(tok *Token) bool {
+	return tok.equal("}") || tok.equal(",") && tok.next.equal("}")
+}
+
+func consumeEnd(rest **Token, tok *Token) bool {
+	if tok.equal("}") {
+		*rest = tok.next
+		return true
+	}
+
+	if tok.equal(",") && tok.next.equal("}") {
+		*rest = tok.next.next
+		return true
+	}
+
+	return false
+}
+
 // enum-specifier = ident? "{" enum-list? "}"
 // | ident ("{" enum-list? "}")?
-// enum-list      = ident ("=" num)? ("," ident ("=" num)?)*
+// enum-list      = ident ("=" num)? ("," ident ("=" num)?)* ","?
 func enumSpecifier(rest **Token, tok *Token) *Type {
 	ty := enumType()
 
@@ -665,7 +683,7 @@ func enumSpecifier(rest **Token, tok *Token) *Type {
 	// Read an enum-list.
 	i := 0
 	val := 0
-	for !tok.equal("}") {
+	for !consumeEnd(rest, tok) {
 		if i > 0 {
 			tok = tok.skip(",")
 		}
@@ -683,8 +701,6 @@ func enumSpecifier(rest **Token, tok *Token) *Type {
 		sc.enumval = val
 		val++
 	}
-
-	*rest = tok.next
 
 	if tag != nil {
 		pushTagScope(tag, ty)
@@ -758,7 +774,7 @@ func countArrayInitElements(tok *Token, ty *Type) int {
 	dummy := NewInitializer(ty.base, false)
 	i := 0
 
-	for ; !tok.equal("}"); i++ {
+	for ; !consumeEnd(&tok, tok); i++ {
 		if i > 0 {
 			tok = tok.skip(",")
 		}
@@ -767,7 +783,7 @@ func countArrayInitElements(tok *Token, ty *Type) int {
 	return i
 }
 
-// array-initializer1 = "{" initializer ("," initializer)* "}"
+// array-initializer1 = "{" initializer ("," initializer)* ","? "}"
 func arrayInitializer1(rest **Token, tok *Token, init *Initializer) {
 	tok = tok.skip("{")
 
@@ -776,7 +792,7 @@ func arrayInitializer1(rest **Token, tok *Token, init *Initializer) {
 		*init = *NewInitializer(arrayOf(init.ty.base, len), false)
 	}
 
-	for i := 0; !consume(rest, tok, "}"); i++ {
+	for i := 0; !consumeEnd(rest, tok); i++ {
 		if i > 0 {
 			tok = tok.skip(",")
 		}
@@ -796,7 +812,7 @@ func arrayInitializer2(rest **Token, tok *Token, init *Initializer) {
 		*init = *NewInitializer(arrayOf(init.ty.base, len), false)
 	}
 
-	for i := 0; i < init.ty.arrayLen && !tok.equal("}"); i++ {
+	for i := 0; i < init.ty.arrayLen && !isEnd(tok); i++ {
 		if i > 0 {
 			tok = tok.skip(",")
 		}
@@ -805,13 +821,13 @@ func arrayInitializer2(rest **Token, tok *Token, init *Initializer) {
 	*rest = tok
 }
 
-// struct-initializer1 = "{" initializer ("," initializer)* "}"
+// struct-initializer1 = "{" initializer ("," initializer)* ","? "}"
 func structInitializer1(rest **Token, tok *Token, init *Initializer) {
 	tok = tok.skip("{")
 
 	mem := init.ty.members
 
-	for !consume(rest, tok, "}") {
+	for !consumeEnd(rest, tok) {
 		if mem != init.ty.members {
 			tok = tok.skip(",")
 		}
@@ -829,7 +845,7 @@ func structInitializer1(rest **Token, tok *Token, init *Initializer) {
 func structInitializer2(rest **Token, tok *Token, init *Initializer) {
 	first := true
 
-	for mem := init.ty.members; mem != nil && !tok.equal("}"); mem = mem.next {
+	for mem := init.ty.members; mem != nil && !isEnd(tok); mem = mem.next {
 		if !first {
 			tok = tok.skip(",")
 		}
@@ -844,6 +860,7 @@ func unionInitializer(rest **Token, tok *Token, init *Initializer) {
 	// and that initializes the first union member.
 	if tok.equal("{") {
 		initializer2(&tok, tok.next, init.children[0])
+		consume(&tok, tok, ",")
 		*rest = tok.skip("}")
 	} else {
 		initializer2(rest, tok, init.children[0])
