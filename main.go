@@ -369,6 +369,19 @@ func parseArgs(args []string) {
 			continue
 		}
 
+		if args[i] == "-L" {
+			i++
+			ldExtraArgs = append(ldExtraArgs, "-L")
+			ldExtraArgs = append(ldExtraArgs, args[i])
+			continue
+		}
+
+		if strings.HasPrefix(args[i], "-L") {
+			ldExtraArgs = append(ldExtraArgs, "-L")
+			ldExtraArgs = append(ldExtraArgs, args[i][2:])
+			continue
+		}
+
 		if args[i] == "-hashmap-test" {
 			hashmapTest()
 			os.Exit(0)
