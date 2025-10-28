@@ -595,6 +595,7 @@ func assignLVarOffsets(prog *Obj) {
 		offset := 0
 		for vara := fn.locals; vara != nil; vara = vara.next {
 			offset += vara.ty.size
+			offset = alignTo(offset, vara.ty.align)
 			vara.offset = -offset
 		}
 		fn.stackSize = alignTo(offset, 16)
