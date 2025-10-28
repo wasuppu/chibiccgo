@@ -114,6 +114,10 @@ int (*fnptr(int (*fn)(int n, ...)))(int, ...) {
 
 int param_decay2(int x()) { return x(); }
 
+char *func_fn(void) {
+  return __func__;
+}
+
 int main() {
   // c25
   ASSERT(3, ret3());
@@ -210,6 +214,11 @@ int main() {
 
   // c152
   ASSERT(3, param_decay2(ret3));
+
+  // c191
+  ASSERT(5, sizeof(__func__));
+  ASSERT(0, strcmp("main", __func__));
+  ASSERT(0, strcmp("func_fn", func_fn()));
 
   printf("OK\n");
   return 0;

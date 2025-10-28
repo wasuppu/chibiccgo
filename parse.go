@@ -2665,6 +2665,11 @@ func function(tok *Token, basety *Type, attr *VarAttr) *Token {
 	}
 
 	tok = tok.skip("{")
+	// [https://www.sigbus.info/n1570#6.4.2.2p1] "__func__" is
+	// automatically defined as a local variable containing the
+	// current function name.
+	pushScope("__func__").vara = newStringLiteral(fn.name+"\x00", arrayOf(tyChar, len(fn.name)+1))
+
 	fn.body = compoundStmt(&tok, tok)
 	fn.locals = locals
 	leaveScope()
