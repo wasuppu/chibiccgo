@@ -265,44 +265,68 @@ func getNumber(tok *Token) int {
 	return int(tok.val)
 }
 
-// declspec = "void" | "char" | "short" | "int" | "long"
-// | struct-decl | union-decl
+const (
+	VOID  = 1 << 0
+	CHAR  = 1 << 2
+	SHORT = 1 << 4
+	INT   = 1 << 6
+	LONG  = 1 << 8
+	OTHER = 1 << 10
+)
+
+// declspec = ("void" | "char" | "short" | "int" | "long"
+// | struct-decl | union-decl)+
 func declspec(rest **Token, tok *Token) *Type {
-	if tok.equal("void") {
-		*rest = tok.next
-		return tyVoid
+	ty := tyInt
+	counter := 0
+
+	for isTypename(tok) {
+		// Handle user-defined types.
+		if tok.equal("struct") || tok.equal("union") {
+			if tok.equal("struct") {
+				ty = structDecl(&tok, tok.next)
+			} else {
+				ty = unionDecl(&tok, tok.next)
+			}
+			counter += OTHER
+			continue
+		}
+
+		// Handle built-in types.
+		if tok.equal("void") {
+			counter += VOID
+		} else if tok.equal("char") {
+			counter += CHAR
+		} else if tok.equal("short") {
+			counter += SHORT
+		} else if tok.equal("int") {
+			counter += INT
+		} else if tok.equal("long") {
+			counter += LONG
+		} else {
+			unreachable()
+		}
+
+		switch counter {
+		case VOID:
+			ty = tyVoid
+		case CHAR:
+			ty = tyChar
+		case SHORT, SHORT + INT:
+			ty = tyShort
+		case INT:
+			ty = tyInt
+		case LONG, LONG + INT:
+			ty = tyLong
+		default:
+			failTok(tok, "invalid type")
+		}
+
+		tok = tok.next
 	}
 
-	if tok.equal("char") {
-		*rest = tok.next
-		return tyChar
-	}
-
-	if tok.equal("short") {
-		*rest = tok.next
-		return tyShort
-	}
-
-	if tok.equal("int") {
-		*rest = tok.next
-		return tyInt
-	}
-
-	if tok.equal("long") {
-		*rest = tok.next
-		return tyLong
-	}
-
-	if tok.equal("struct") {
-		return structDecl(rest, tok.next)
-	}
-
-	if tok.equal("union") {
-		return unionDecl(rest, tok.next)
-	}
-
-	failTok(tok, "typename expected")
-	return nil
+	*rest = tok
+	return ty
 }
 
 // func-params = (param ("," param)*)? ")"
