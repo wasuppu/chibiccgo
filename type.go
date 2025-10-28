@@ -159,6 +159,9 @@ func (node *Node) addType() {
 	case ND_FUNCALL:
 		node.ty = tyLong
 		return
+	case ND_NOT:
+		node.ty = tyInt
+		return
 	case ND_VAR:
 		node.ty = node.vara.ty
 		return

@@ -266,6 +266,12 @@ func (a X64) genExpr(node *Node) {
 		a.genExpr(node.lhs)
 		a.castType(node.lhs.ty, node.ty)
 		return
+	case ND_NOT:
+		a.genExpr(node.lhs)
+		println("  cmp $0, %%rax")
+		println("  sete %%al")
+		println("  movzx %%al, %%rax")
+		return
 	case ND_FUNCALL:
 		nargs := 0
 		for arg := node.args; arg != nil; arg = arg.next {
@@ -610,6 +616,10 @@ func (a RiscV) genExpr(node *Node) {
 	case ND_CAST:
 		a.genExpr(node.lhs)
 		a.castType(node.lhs.ty, node.ty)
+		return
+	case ND_NOT:
+		a.genExpr(node.lhs)
+		println("  seqz a0, a0")
 		return
 	case ND_FUNCALL:
 		nargs := 0
