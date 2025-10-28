@@ -355,7 +355,12 @@ func NewInitializer(ty *Type, isFlexible bool) *Initializer {
 
 		init.children = make([]*Initializer, len)
 		for mem := ty.members; mem != nil; mem = mem.next {
-			init.children[mem.idx] = NewInitializer(mem.ty, false)
+			if isFlexible && ty.isFlexible && mem.next == nil {
+				child := &Initializer{ty: mem.ty, isFlexible: true}
+				init.children[mem.idx] = child
+			} else {
+				init.children[mem.idx] = NewInitializer(mem.ty, false)
+			}
 		}
 		return init
 	}
@@ -921,9 +926,40 @@ func initializer2(rest **Token, tok *Token, init *Initializer) {
 	init.expr = assign(rest, tok)
 }
 
+func copyStructType(ty *Type) *Type {
+	ty = copyType(ty)
+
+	head := Member{}
+	cur := &head
+	for mem := ty.members; mem != nil; mem = mem.next {
+		m := &Member{}
+		*m = *mem
+		cur.next = m
+		cur = cur.next
+	}
+
+	ty.members = head.next
+	return ty
+}
+
 func initializer(rest **Token, tok *Token, ty *Type, newty **Type) *Initializer {
 	init := NewInitializer(ty, true)
 	initializer2(rest, tok, init)
+
+	if (ty.kind == TY_STRUCT || ty.kind == TY_UNION) && ty.isFlexible {
+		ty = copyStructType(ty)
+
+		mem := ty.members
+		for mem.next != nil {
+			mem = mem.next
+		}
+		mem.ty = init.children[mem.idx].ty
+		ty.size += mem.ty.size
+
+		*newty = ty
+		return init
+	}
+
 	*newty = init.ty
 	return init
 }
@@ -1905,6 +1941,7 @@ func structMembers(rest **Token, tok *Token, ty *Type) {
 	// if were a zero-sized array.
 	if cur != &head && cur.ty.kind == TY_ARRAY && cur.ty.arrayLen < 0 {
 		cur.ty = arrayOf(cur.ty.base, 0)
+		ty.isFlexible = true
 	}
 
 	*rest = tok.next

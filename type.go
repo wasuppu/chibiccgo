@@ -40,7 +40,8 @@ type Type struct {
 	arrayLen int
 
 	// Struct
-	members *Member
+	members    *Member
+	isFlexible bool
 
 	// Function type
 	returnTy *Type
