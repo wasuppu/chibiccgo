@@ -432,6 +432,31 @@ func declarator(rest **Token, tok *Token, ty *Type) *Type {
 	return ty
 }
 
+// abstract-declarator = "*"* ("(" abstract-declarator ")")? type-suffix
+func abstractDeclarator(rest **Token, tok *Token, ty *Type) *Type {
+	for tok.equal("*") {
+		ty = pointerTo(ty)
+		tok = tok.next
+	}
+
+	if tok.equal("(") {
+		start := tok
+		dummy := Type{}
+		abstractDeclarator(&tok, start.next, &dummy)
+		tok = tok.skip(")")
+		ty = typeSuffix(rest, tok, ty)
+		return abstractDeclarator(&tok, start.next, ty)
+	}
+
+	return typeSuffix(rest, tok, ty)
+}
+
+// type-name = declspec abstract-declarator
+func typename(rest **Token, tok *Token) *Type {
+	ty := declspec(&tok, tok, nil)
+	return abstractDeclarator(rest, tok, ty)
+}
+
 // declaration = declspec (declarator ("=" expr)? ("," declarator ("=" expr)?)*)? ";"
 func declaration(rest **Token, tok *Token, basety *Type) *Node {
 	head := Node{}
@@ -975,11 +1000,14 @@ func funcall(rest **Token, tok *Token) *Node {
 
 // primary = "(" "{" stmt+ "}" ")"
 // | "(" expr ")"
+// | "sizeof" "(" type-name ")"
 // | "sizeof" unary
 // | ident func-args?
 // | str
 // | num
 func primary(rest **Token, tok *Token) *Node {
+	start := tok
+
 	if tok.equal("(") && tok.next.equal("{") {
 		// This is a GNU statement expresssion.
 		node := NewNode(ND_STMT_EXPR, tok)
@@ -992,6 +1020,12 @@ func primary(rest **Token, tok *Token) *Node {
 		node := expr(&tok, tok.next)
 		*rest = tok.skip(")")
 		return node
+	}
+
+	if tok.equal("sizeof") && tok.next.equal("(") && isTypename(tok.next.next) {
+		ty := typename(&tok, tok.next.next)
+		*rest = tok.skip(")")
+		return NewNum(int64(ty.size), start)
 	}
 
 	if tok.equal("sizeof") {
