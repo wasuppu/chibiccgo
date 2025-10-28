@@ -10,6 +10,9 @@ var locals *Obj
 var globals *Obj
 var scope = &Scope{}
 
+// Points to the function object the parser is currently parsing.
+var currentParseFn *Obj
+
 // Struct member
 type Member struct {
 	next   *Member
@@ -536,8 +539,11 @@ func isTypename(tok *Token) bool {
 func stmt(rest **Token, tok *Token) *Node {
 	if tok.equal("return") {
 		node := NewNode(ND_RETURN, tok)
-		node.lhs = expr(&tok, tok.next)
+		exp := expr(&tok, tok.next)
 		*rest = tok.skip(";")
+
+		exp.addType()
+		node.lhs = NewCast(exp, currentParseFn.ty.returnTy)
 		return node
 	}
 
@@ -1142,6 +1148,7 @@ func function(tok *Token, basety *Type) *Token {
 		return tok
 	}
 
+	currentParseFn = fn
 	locals = nil
 	enterScope()
 	createParamLvars(ty.params)
