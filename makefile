@@ -30,7 +30,7 @@ test: $(TESTS)
 
 # Stage 2
 
-CFLAGS=-std=c11 -g -fno-common
+CFLAGS=-std=c11 -g -fno-common -Wall -Wno-switch
 SCSRCS=$(wildcard ./source/*.c)
 SCOBJS=$(notdir $(SCSRCS:.c=.o))
 
