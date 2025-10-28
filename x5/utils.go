@@ -1,0 +1,66 @@
+package main
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"runtime"
+	"strings"
+)
+
+// Reports an error and exit.
+func fail(format string, args ...any) {
+	fmt.Fprintf(os.Stderr, format+"\n", args...)
+	os.Exit(1)
+}
+
+// Reports an error location and exit.
+func failAt(loc int, format string, args ...any) {
+	pos := currentInputLoc - loc
+	fmt.Fprintln(os.Stderr, source[currentInputLoc:])
+	fmt.Fprintf(os.Stderr, "%*s", pos, "") // print pos spaces
+	fmt.Fprint(os.Stderr, "^ ")
+	fmt.Fprintf(os.Stderr, format+"\n", args...)
+	os.Exit(1)
+}
+
+func failTok(tok *Token, format string, args ...any) {
+	failAt(tok.loc, format, args...)
+}
+
+func assert(condition bool) {
+	if condition {
+		return
+	}
+
+	pc, file, line, ok := runtime.Caller(1)
+	if !ok {
+		panic("failed to get caller info")
+	}
+
+	frames := runtime.CallersFrames([]uintptr{pc})
+	frame, _ := frames.Next()
+	funcName := frame.Function
+
+	fileContent, err := os.ReadFile(file)
+	if err != nil {
+		panic(fmt.Sprintf("failed to read file: %v", err))
+	}
+
+	lines := strings.Split(string(fileContent), "\n")
+	if line-1 >= len(lines) {
+		panic("invalid line number")
+	}
+	expr := strings.TrimSpace(lines[line-1])
+	start := strings.Index(expr, "(")
+	end := strings.LastIndex(expr, ")")
+	if start != -1 && end != -1 && end > start {
+		expr = expr[start+1 : end]
+	}
+
+	msg := fmt.Sprintf("%s:%d: %s: Assertion `%s` failed\n",
+		filepath.Base(file), line, funcName, expr)
+
+	fmt.Fprint(os.Stderr, msg)
+	os.Exit(1)
+}
