@@ -3,11 +3,13 @@
 arch=$1
 case $arch in
     "x64")
-        build_cmd="gcc -static -o tmp tmp.s"
+        compiler="gcc"
+        build_cmd="gcc -static -o tmp tmp.s tmp2.o"
         run_cmd="./tmp"
         ;;
     "riscv")
-        build_cmd="riscv64-unknown-elf-gcc -static -o tmp tmp.s"
+        compiler="riscv64-unknown-elf-gcc"
+        build_cmd="riscv64-unknown-elf-gcc -static -o tmp tmp.s tmp2.o"
         run_cmd="qemu-riscv64 -L \$RISCV/sysroot ./tmp"
         ;;
     *)
@@ -16,6 +18,10 @@ case $arch in
         ;;
 esac
 
+cat <<EOF | $compiler -xc -c -o tmp2.o -
+int ret3() { return 3; }
+int ret5() { return 5; }
+EOF
 
 assert() {
     expected=$1
@@ -122,5 +128,9 @@ assert 5 '{ int x=3; return (&x+2)-&x+3; }'
 # c22
 assert 8 '{ int x, y; x=3; y=5; return x+y; }'
 assert 8 '{ int x=3, y=5; return x+y; }'
+
+# c23
+assert 3 '{ return ret3(); }'
+assert 5 '{ return ret5(); }'
 
 echo OK

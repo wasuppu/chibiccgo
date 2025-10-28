@@ -96,6 +96,10 @@ func (a X64) genExpr(node *Node) {
 		a.pop("%rdi")
 		fmt.Printf("  mov %%rax, (%%rdi)\n")
 		return
+	case ND_FUNCALL:
+		fmt.Printf("  mov $0, %%rax\n")
+		fmt.Printf("  call %s\n", node.funcname)
+		return
 	}
 
 	a.genExpr(node.rhs)
@@ -194,7 +198,8 @@ func (a RiscV) prologue(stackSize int) {
 	fmt.Printf("  .globl main\n")
 	fmt.Printf("main:\n")
 
-	fmt.Printf("  addi sp, sp, -8\n")
+	fmt.Printf("  addi sp, sp, -16\n")
+	fmt.Printf("  sd ra, 8(sp)\n")
 	fmt.Printf("  sd fp, 0(sp)\n")
 	fmt.Printf("  mv fp, sp\n")
 
@@ -205,7 +210,8 @@ func (a RiscV) epilogue() {
 	fmt.Printf(".L.return:\n")
 	fmt.Printf("  mv sp, fp\n")
 	fmt.Printf("  ld fp, 0(sp)\n")
-	fmt.Printf("  addi sp, sp, 8\n")
+	fmt.Printf("  ld ra, 8(sp)\n")
+	fmt.Printf("  addi sp, sp, 16\n")
 	fmt.Printf("  ret\n")
 }
 
@@ -263,6 +269,9 @@ func (a RiscV) genExpr(node *Node) {
 		a.genExpr(node.rhs)
 		a.pop("a1")
 		fmt.Printf("  sd a0, 0(a1)\n")
+		return
+	case ND_FUNCALL:
+		fmt.Printf("  call %s\n", node.funcname)
 		return
 	}
 

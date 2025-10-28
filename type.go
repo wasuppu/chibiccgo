@@ -51,7 +51,7 @@ func (node *Node) addType() {
 	case ND_ADD, ND_SUB, ND_MUL, ND_DIV, ND_NEG, ND_ASSIGN:
 		node.ty = node.lhs.ty
 		return
-	case ND_EQ, ND_NE, ND_LT, ND_LE, ND_NUM:
+	case ND_EQ, ND_NE, ND_LT, ND_LE, ND_NUM, ND_FUNCALL:
 		node.ty = tyInt
 		return
 	case ND_VAR:

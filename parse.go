@@ -39,6 +39,7 @@ const (
 	ND_IF                        // "if"
 	ND_FOR                       // "for"
 	ND_BLOCK                     // { ... }
+	ND_FUNCALL                   // Function call
 	ND_EXPR_STMT                 // Expression statement
 	ND_VAR                       // Variable
 	ND_NUM                       // Integer
@@ -63,6 +64,9 @@ type Node struct {
 
 	// Block
 	body *Node
+
+	// Function call
+	funcname string
 
 	vara *Obj // Used if kind == ND_VAR
 	val  int  // Used if kind == ND_NUM
@@ -476,7 +480,8 @@ func unary(rest **Token, tok *Token) *Node {
 	return primary(rest, tok)
 }
 
-// primary = "(" expr ")" | ident | num
+// primary = "(" expr ")" | ident args? | num
+// args = "(" ")"
 func primary(rest **Token, tok *Token) *Node {
 	if tok.equal("(") {
 		node := expr(&tok, tok.next)
@@ -485,6 +490,15 @@ func primary(rest **Token, tok *Token) *Node {
 	}
 
 	if tok.kind == TK_IDENT {
+		// Function call
+		if tok.next.equal("(") {
+			node := NewNode(ND_FUNCALL, tok)
+			node.funcname = tok.lexeme
+			*rest = tok.next.next.skip(")")
+			return node
+		}
+
+		// Variable
 		vara := findVar(tok)
 		if vara == nil {
 			failTok(tok, "undefined variable")
