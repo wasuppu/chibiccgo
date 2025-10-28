@@ -19,6 +19,8 @@ var kws = []string{
 	"struct",
 }
 
+var puncts = []string{"==", "!=", "<=", ">=", "->"}
+
 // Token
 type TokenKind int
 
@@ -98,9 +100,10 @@ func fromHex(c byte) byte {
 
 // Read a punctuator token from p and returns its length.
 func readPunct(p int) int {
-	if strings.HasPrefix(source[p:], "==") || strings.HasPrefix(source[p:], "!=") ||
-		strings.HasPrefix(source[p:], "<=") || strings.HasPrefix(source[p:], ">=") {
-		return 2
+	for i := range puncts {
+		if strings.HasPrefix(source[p:], puncts[i]) {
+			return len(puncts[i])
+		}
 	}
 
 	if unicode.IsPunct(rune(source[p])) || unicode.IsSymbol(rune(source[p])) {

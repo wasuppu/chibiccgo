@@ -777,7 +777,7 @@ func structRef(lhs *Node, tok *Token) *Node {
 	return node
 }
 
-// postfix = primary ("[" expr "]" | "." ident)*
+// postfix = primary ("[" expr "]" | "." ident | "->" ident)*
 func postfix(rest **Token, tok *Token) *Node {
 	node := primary(&tok, tok)
 
@@ -792,6 +792,14 @@ func postfix(rest **Token, tok *Token) *Node {
 		}
 
 		if tok.equal(".") {
+			node = structRef(node, tok.next)
+			tok = tok.next.next
+			continue
+		}
+
+		if tok.equal("->") {
+			// x->y is short for (*x).y
+			node = NewUnary(ND_DEREF, node, tok)
 			node = structRef(node, tok.next)
 			tok = tok.next.next
 			continue
