@@ -20,7 +20,9 @@ var kws = []string{
 	"enum", "static",
 }
 
-var puncts = []string{"==", "!=", "<=", ">=", "->"}
+var puncts = []string{
+	"==", "!=", "<=", ">=", "->", "+=", "-=", "*=", "/=",
+}
 
 // Token
 type TokenKind int

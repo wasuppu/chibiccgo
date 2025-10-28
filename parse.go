@@ -745,12 +745,51 @@ func expr(rest **Token, tok *Token) *Node {
 	return node
 }
 
-// assign = equality ("=" assign)?
+// Convert `A op= B` to `tmp = &A, *tmp = *tmp op B`
+// where tmp is a fresh pointer variable.
+func toAssign(binary *Node) *Node {
+	binary.lhs.addType()
+	binary.rhs.addType()
+	tok := binary.tok
+
+	vara := NewLVar("", pointerTo(binary.lhs.ty))
+
+	expr1 := NewBinary(ND_ASSIGN, NewVarNode(vara, tok),
+		NewUnary(ND_ADDR, binary.lhs, tok), tok)
+
+	expr2 := NewBinary(ND_ASSIGN, NewUnary(ND_DEREF, NewVarNode(vara, tok), tok),
+		NewBinary(binary.kind,
+			NewUnary(ND_DEREF, NewVarNode(vara, tok), tok),
+			binary.rhs,
+			tok),
+		tok)
+
+	return NewBinary(ND_COMMA, expr1, expr2, tok)
+}
+
+// assign    = equality (assign-op assign)?
+// assign-op = "=" | "+=" | "-=" | "*=" | "/="
 func assign(rest **Token, tok *Token) *Node {
 	node := equality(&tok, tok)
 
 	if tok.equal("=") {
 		return NewBinary(ND_ASSIGN, node, assign(rest, tok.next), tok)
+	}
+
+	if tok.equal("+=") {
+		return toAssign(newAdd(node, assign(rest, tok.next), tok))
+	}
+
+	if tok.equal("-=") {
+		return toAssign(newSub(node, assign(rest, tok.next), tok))
+	}
+
+	if tok.equal("*=") {
+		return toAssign(NewBinary(ND_MUL, node, assign(rest, tok.next), tok))
+	}
+
+	if tok.equal("/=") {
+		return toAssign(NewBinary(ND_DIV, node, assign(rest, tok.next), tok))
 	}
 
 	*rest = tok
