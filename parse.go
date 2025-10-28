@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/binary"
 	"fmt"
+	"math"
 )
 
 // All local variable instances created during parsing are
@@ -1210,6 +1211,16 @@ func writeGVarData(cur *Relocation, init *Initializer, ty *Type, buf []byte, off
 		return cur
 	}
 
+	if ty.kind == TY_FLOAT {
+		binary.LittleEndian.PutUint32(buf[offset:], math.Float32bits(float32(evalDouble(init.expr))))
+		return cur
+	}
+
+	if ty.kind == TY_DOUBLE {
+		binary.LittleEndian.PutUint64(buf[offset:], math.Float64bits(evalDouble(init.expr)))
+		return cur
+	}
+
 	var label string
 	val := uint64(eval2(init.expr, &label))
 
@@ -1557,6 +1568,10 @@ func eval(node *Node) int64 {
 func eval2(node *Node, label *string) int64 {
 	node.addType()
 
+	if node.ty.isFlonum() {
+		return int64(evalDouble(node))
+	}
+
 	switch node.kind {
 	case ND_ADD:
 		return eval2(node.lhs, label) + eval(node.rhs)
@@ -1728,6 +1743,48 @@ func evalRVal(node *Node, label *string) int64 {
 func constExpr(rest **Token, tok *Token) int64 {
 	node := conditional(rest, tok)
 	return eval(node)
+}
+
+func evalDouble(node *Node) float64 {
+	node.addType()
+
+	if node.ty.isInteger() {
+		if node.ty.isUnsigned {
+			return float64(uint64(eval(node)))
+		}
+		return float64(eval(node))
+	}
+
+	switch node.kind {
+	case ND_ADD:
+		return evalDouble(node.lhs) + evalDouble(node.rhs)
+	case ND_SUB:
+		return evalDouble(node.lhs) - evalDouble(node.rhs)
+	case ND_MUL:
+		return evalDouble(node.lhs) * evalDouble(node.rhs)
+	case ND_DIV:
+		return evalDouble(node.lhs) / evalDouble(node.rhs)
+	case ND_NEG:
+		return -evalDouble(node.lhs)
+	case ND_COND:
+		if evalDouble(node.cond) != 0 {
+			return evalDouble(node.then)
+		} else {
+			return evalDouble(node.els)
+		}
+	case ND_COMMA:
+		return evalDouble(node.rhs)
+	case ND_CAST:
+		if node.lhs.ty.isFlonum() {
+			return evalDouble(node.lhs)
+		}
+		return float64(eval(node.lhs))
+	case ND_NUM:
+		return node.fval
+	}
+
+	failTok(node.tok, "not a compile-time constant")
+	return -1
 }
 
 // Convert `A op= B` to `tmp = &A, *tmp = *tmp op B`
