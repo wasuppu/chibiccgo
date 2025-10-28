@@ -3154,7 +3154,13 @@ func primary(rest **Token, tok *Token) *Node {
 		ty := typename(&tok, tok.next.next)
 		*rest = tok.skip(")")
 		if ty.kind == TY_VLA {
-			return NewVarNode(ty.vlaSize, tok)
+			if ty.vlaSize != nil {
+				return NewVarNode(ty.vlaSize, tok)
+			}
+
+			lhs := computeVlaSize(ty, tok)
+			rhs := NewVarNode(ty.vlaSize, tok)
+			return NewBinary(ND_COMMA, lhs, rhs, tok)
 		}
 		return NewULong(int64(ty.size), start)
 	}
