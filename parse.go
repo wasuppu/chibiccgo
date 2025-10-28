@@ -33,6 +33,7 @@ const (
 	ND_LE                        // <=
 	ND_ASSIGN                    // =
 	ND_RETURN                    // "return"
+	ND_BLOCK                     // { ... }
 	ND_EXPR_STMT                 // Expression statement
 	ND_VAR                       // Variable
 	ND_NUM                       // Integer
@@ -44,8 +45,12 @@ type Node struct {
 	next *Node    // Next node
 	lhs  *Node    // Left-hand side
 	rhs  *Node    // Right-hand side
-	vara *Obj     // Used if kind == ND_VAR
-	val  int      // Used if kind == ND_NUM
+
+	// Block
+	body *Node
+
+	vara *Obj // Used if kind == ND_VAR
+	val  int  // Used if kind == ND_NUM
 }
 
 // Find a local variable by name.
@@ -99,6 +104,7 @@ func NewLVar(name string) *Obj {
 }
 
 // stmt = "return" expr ";"
+// | "{" compound-stmt
 // | expr-stmt
 func stmt(rest **Token, tok *Token) *Node {
 	if tok.equal("return") {
@@ -107,7 +113,26 @@ func stmt(rest **Token, tok *Token) *Node {
 		return node
 	}
 
+	if tok.equal("{") {
+		return compoundStmt(rest, tok.next)
+	}
+
 	return exprStmt(rest, tok)
+}
+
+// compound-stmt = stmt* "}"
+func compoundStmt(rest **Token, tok *Token) *Node {
+	head := Node{}
+	cur := &head
+	for !tok.equal("}") {
+		cur.next = stmt(&tok, tok)
+		cur = cur.next
+	}
+
+	node := NewNode(ND_BLOCK)
+	node.body = head.next
+	*rest = tok.next
+	return node
 }
 
 // expr-stmt = expr ";"
@@ -265,14 +290,10 @@ func primary(rest **Token, tok *Token) *Node {
 
 // program = stmt*
 func parse(tok *Token) *Function {
-	head := Node{}
-	cur := &head
+	tok = tok.skip("{")
 
-	for tok.kind != TK_EOF {
-		cur.next = stmt(&tok, tok)
-		cur = cur.next
-	}
-
-	prog := &Function{body: head.next, locals: locals}
+	prog := &Function{}
+	prog.body = compoundStmt(&tok, tok)
+	prog.locals = locals
 	return prog
 }

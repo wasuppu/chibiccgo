@@ -129,6 +129,11 @@ func (a X64) genExpr(node *Node) {
 
 func (a X64) genStmt(node *Node) {
 	switch node.kind {
+	case ND_BLOCK:
+		for n := node.body; n != nil; n = n.next {
+			a.genStmt(n)
+		}
+		return
 	case ND_RETURN:
 		a.genExpr(node.lhs)
 		fmt.Printf("  jmp .L.return\n")
@@ -250,6 +255,11 @@ func (a RiscV) genExpr(node *Node) {
 
 func (a RiscV) genStmt(node *Node) {
 	switch node.kind {
+	case ND_BLOCK:
+		for n := node.body; n != nil; n = n.next {
+			a.genStmt(n)
+		}
+		return
 	case ND_RETURN:
 		a.genExpr(node.lhs)
 		fmt.Printf("  j .L.return\n")
@@ -268,10 +278,8 @@ func codegen(arch string, prog *Function) {
 	target := chooseArch(arch)
 	target.prologue(prog.stackSize)
 
-	for n := prog.body; n != nil; n = n.next {
-		target.genStmt(n)
-		assert(depth == 0)
-	}
+	target.genStmt(prog.body)
+	assert(depth == 0)
 
 	target.epilogue()
 }
