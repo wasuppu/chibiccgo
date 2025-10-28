@@ -318,6 +318,13 @@ func NewLong(val int64, tok *Token) *Node {
 	return node
 }
 
+func NewULong(val int64, tok *Token) *Node {
+	node := NewNode(ND_NUM, tok)
+	node.val = val
+	node.ty = tyULong
+	return node
+}
+
 func NewVarNode(vara *Obj, tok *Token) *Node {
 	node := NewNode(ND_VAR, tok)
 	node.vara = vara
@@ -1918,7 +1925,7 @@ func newSub(lhs, rhs *Node, tok *Token) *Node {
 	// ptr - ptr, which returns how many elements are between the two.
 	if lhs.ty.base != nil && rhs.ty.base != nil {
 		node := NewBinary(ND_SUB, lhs, rhs, tok)
-		node.ty = tyInt
+		node.ty = tyLong
 		return NewBinary(ND_DIV, node, NewNum(int64(lhs.ty.base.size), tok), tok)
 	}
 
@@ -2353,25 +2360,25 @@ func primary(rest **Token, tok *Token) *Node {
 	if tok.equal("sizeof") && tok.next.equal("(") && isTypename(tok.next.next) {
 		ty := typename(&tok, tok.next.next)
 		*rest = tok.skip(")")
-		return NewNum(int64(ty.size), start)
+		return NewULong(int64(ty.size), start)
 	}
 
 	if tok.equal("sizeof") {
 		node := unary(rest, tok.next)
 		node.addType()
-		return NewNum(int64(node.ty.size), tok)
+		return NewULong(int64(node.ty.size), tok)
 	}
 
 	if tok.equal("_Alignof") && tok.next.equal("(") && isTypename(tok.next.next) {
 		ty := typename(&tok, tok.next.next)
 		*rest = tok.skip(")")
-		return NewNum(int64(ty.align), tok)
+		return NewULong(int64(ty.align), tok)
 	}
 
 	if tok.equal("_Alignof") {
 		node := unary(rest, tok.next)
 		node.addType()
-		return NewNum(int64(node.ty.align), tok)
+		return NewULong(int64(node.ty.align), tok)
 	}
 
 	if tok.kind == TK_IDENT {
