@@ -197,12 +197,14 @@ func runCC1(args []string, input, output string) {
 func cc1(target Arch) {
 	// Tokenize and parse.
 	tok := tokenizeFile(basefile)
+	if tok == nil {
+		fail("fail to tokenize %s", basefile)
+	}
 	tok = preprocess(tok)
 	prog := parse(tok)
 
 	// Traverse the AST to emit assembly.
 	out := openFile(outfile)
-	fmt.Fprintf(out, ".file 1 \"%s\"\n", basefile)
 	codegen(target, prog, out)
 }
 

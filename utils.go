@@ -36,21 +36,21 @@ func fail(format string, args ...any) {
 // Reports an error message in the following format.
 // foo.c:10: x = y + 1;
 // ^ <error message here>
-func vfailAt(lineno, loc int, format string, args ...any) {
+func vfailAt(filename, input string, lineno, loc int, format string, args ...any) {
 	// Find a line containing `loc`.
 	line := loc
-	for currentInputLoc < line && source[line-1] != '\n' {
+	for 0 < line && input[line-1] != '\n' {
 		line--
 	}
 
 	end := loc
-	for source[end] != '\n' {
+	for input[end] != '\n' {
 		end++
 	}
 
 	// Print out the line.
-	indent, _ := fmt.Fprintf(os.Stderr, "%s:%d: ", currentFilename, lineno)
-	fmt.Fprintf(os.Stderr, "%.*s\n", end-line, source[line:])
+	indent, _ := fmt.Fprintf(os.Stderr, "%s:%d: ", filename, lineno)
+	fmt.Fprintf(os.Stderr, "%.*s\n", end-line, input[line:])
 
 	// Show the error message.
 	pos := loc - line + indent
@@ -63,17 +63,17 @@ func vfailAt(lineno, loc int, format string, args ...any) {
 func failAt(loc int, format string, args ...any) {
 	// Get a line number.
 	lineno := 1
-	for p := currentInputLoc; p < loc; p++ {
+	for p := 0; p < loc; p++ {
 		if source[p] == '\n' {
 			lineno++
 		}
 	}
-	vfailAt(lineno, loc, format, args...)
+	vfailAt(currentFile.name, currentFile.contents, lineno, loc, format, args...)
 	os.Exit(1)
 }
 
 func failTok(tok *Token, format string, args ...any) {
-	vfailAt(tok.lineno, tok.loc, format, args...)
+	vfailAt(tok.file.name, tok.file.contents, tok.lineno, tok.loc, format, args...)
 	os.Exit(1)
 }
 

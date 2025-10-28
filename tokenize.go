@@ -10,9 +10,10 @@ import (
 	"unicode"
 )
 
+var inputfiles []*File
+
 var source string
-var currentInputLoc int
-var currentFilename string
+var currentFile *File
 
 // True if the current position is at the beginning of a line
 var atBol bool
@@ -30,6 +31,20 @@ var puncts = []string{
 	"<<=", ">>=", "...", "==", "!=", "<=", ">=", "->", "+=",
 	"-=", "*=", "/=", "++", "--", "%=", "&=", "|=", "^=", "&&",
 	"||", "<<", ">>",
+}
+
+type File struct {
+	name     string
+	fileno   int
+	contents string
+}
+
+func newFile(name string, fileno int, contents string) *File {
+	return &File{
+		name:     name,
+		fileno:   fileno,
+		contents: contents,
+	}
 }
 
 // Token
@@ -55,6 +70,7 @@ type Token struct {
 	lexeme string    // Token lexeme value in string
 	ty     *Type     // Used if TK_NUM or TK_STR
 	str    string    // String literal contents including terminating '\0'
+	file   *File     // Source location
 	lineno int       // Line number
 	atBol  bool      // True if this token is at beginning of line
 }
@@ -65,6 +81,7 @@ func NewToken(kind TokenKind, pos int, len int, lexme string) *Token {
 		kind:   kind,
 		loc:    pos,
 		len:    len,
+		file:   currentFile,
 		lexeme: lexme,
 		atBol:  atBol,
 	}
@@ -396,7 +413,7 @@ func convertKeywords(tok *Token) {
 
 // Initialize line info for all tokens.
 func addLineNumbers(tok *Token) {
-	p := currentInputLoc
+	p := 0
 	n := 1
 
 	for {
@@ -416,9 +433,11 @@ func addLineNumbers(tok *Token) {
 }
 
 // Tokenize a given string and returns new tokens.
-func tokenize(filename string, input string) *Token {
-	currentFilename = filename
-	source = input
+func tokenize(file *File) *Token {
+	currentFile = file
+	source = currentFile.contents
+
+	input := file.contents
 	head := Token{}
 	cur := &head
 	p := 0
@@ -524,7 +543,7 @@ func readFile(path string) string {
 		data, err = os.ReadFile(path)
 	}
 	if err != nil {
-		fail(fmt.Sprint("fail to read source:", err))
+		return ""
 	}
 
 	content := string(data)
@@ -534,8 +553,22 @@ func readFile(path string) string {
 	return content
 }
 
+var fileno int
+
 func tokenizeFile(path string) *Token {
-	return tokenize(path, readFile(path))
+	p := readFile(path)
+	if len(p) == 0 {
+		return nil
+	}
+	file := newFile(path, fileno+1, p)
+
+	// Save the filename for assembler .file directive.
+	inputfiles = append(inputfiles, make([]*File, fileno+2-len(inputfiles))...)
+	inputfiles[fileno] = file
+	inputfiles[fileno+1] = nil
+	fileno++
+
+	return tokenize(file)
 }
 
 func getIntegerEnd(s string, base int) int {

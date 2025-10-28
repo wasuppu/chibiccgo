@@ -434,7 +434,7 @@ func (a X64) genAddr(node *Node) {
 
 // Generate code for a given node.
 func (a X64) genExpr(node *Node) {
-	println("  .loc 1 %d", node.tok.lineno)
+	println("  .loc %d %d", node.tok.file.fileno, node.tok.lineno)
 
 	switch node.kind {
 	case ND_NULL_EXPR:
@@ -756,7 +756,7 @@ func (a X64) genExpr(node *Node) {
 }
 
 func (a X64) genStmt(node *Node) {
-	println("  .loc 1 %d", node.tok.lineno)
+	println("  .loc %d %d", node.tok.file.fileno, node.tok.lineno)
 
 	switch node.kind {
 	case ND_IF:
@@ -1210,7 +1210,7 @@ func (a RiscV) genAddr(node *Node) {
 
 // Generate code for a given node.
 func (a RiscV) genExpr(node *Node) {
-	println("  .loc 1 %d", node.tok.lineno)
+	println("  .loc %d %d", node.tok.file.fileno, node.tok.lineno)
 
 	switch node.kind {
 	case ND_NULL_EXPR:
@@ -1544,7 +1544,7 @@ func (a RiscV) genExpr(node *Node) {
 }
 
 func (a RiscV) genStmt(node *Node) {
-	println("  .loc 1 %d", node.tok.lineno)
+	println("  .loc %d %d", node.tok.file.fileno, node.tok.lineno)
 
 	switch node.kind {
 	case ND_IF:
@@ -1737,6 +1737,12 @@ func simpleLog2(num int) int {
 
 func codegen(target Arch, prog *Obj, out *os.File) {
 	outputFile = out
+
+	files := inputfiles
+	for i := 0; files[i] != nil; i++ {
+		println("  .file %d \"%s\"", files[i].fileno, files[i].name)
+	}
+
 	assignLVarOffsets(prog)
 
 	target.emitData(prog)
