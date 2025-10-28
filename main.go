@@ -31,6 +31,7 @@ var optC bool
 var optCC1 bool
 var optHashHashHash bool
 var optMF string
+var optMT string
 var optO string
 var optMarch string
 
@@ -60,7 +61,7 @@ func usage(status int) {
 }
 
 func takeArg(arg string) bool {
-	x := []string{"-o", "-I", "-idirafter", "-include", "-x", "-MF"}
+	x := []string{"-o", "-I", "-idirafter", "-include", "-x", "-MF", "-MT"}
 
 	for i := range x {
 		if arg == x[i] {
@@ -259,6 +260,16 @@ func parseArgs(args []string) {
 			continue
 		}
 
+		if args[i] == "-MT" {
+			i++
+			if len(optMT) == 0 {
+				optMT = args[i]
+			} else {
+				optMT = fmt.Sprintf("%s %s", optMT, args[i])
+			}
+			continue
+		}
+
 		if args[i] == "-cc1-input" {
 			i++
 			basefile = args[i]
@@ -439,7 +450,11 @@ func printDependencies() {
 	}
 
 	out := openFile(path)
-	fmt.Fprintf(out, "%s:", replaceExtn(basefile, ".o"))
+	if len(optMT) > 0 {
+		fmt.Fprintf(out, "%s:", optMT)
+	} else {
+		fmt.Fprintf(out, "%s:", replaceExtn(basefile, ".o"))
+	}
 
 	files := inputfiles
 
