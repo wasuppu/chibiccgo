@@ -452,9 +452,11 @@ const (
 	SHORT    = 1 << 6
 	INT      = 1 << 8
 	LONG     = 1 << 10
-	OTHER    = 1 << 12
-	SIGNED   = 1 << 13
-	UNSIGNED = 1 << 14
+	FLOAT    = 1 << 12
+	DOUBLE   = 1 << 14
+	OTHER    = 1 << 16
+	SIGNED   = 1 << 17
+	UNSIGNED = 1 << 18
 )
 
 // declspec = ("void" | "_Bool" | "char" | "short" | "int" | "long"
@@ -548,6 +550,10 @@ func declspec(rest **Token, tok *Token, attr *VarAttr) *Type {
 			counter += INT
 		} else if tok.equal("long") {
 			counter += LONG
+		} else if tok.equal("float") {
+			counter += FLOAT
+		} else if tok.equal("double") {
+			counter += DOUBLE
 		} else if tok.equal("signed") {
 			counter |= SIGNED
 		} else if tok.equal("unsigned") {
@@ -589,6 +595,10 @@ func declspec(rest **Token, tok *Token, attr *VarAttr) *Type {
 			UNSIGNED + LONG + LONG,
 			UNSIGNED + LONG + LONG + INT:
 			ty = tyULong
+		case FLOAT:
+			ty = tyFloat
+		case DOUBLE:
+			ty = tyDouble
 		default:
 			failTok(tok, "invalid type")
 		}
@@ -1231,7 +1241,7 @@ var typenames = []string{
 	"void", "_Bool", "char", "short", "int", "long", "struct", "union",
 	"typedef", "enum", "static", "extern", "_Alignas", "signed", "unsigned",
 	"const", "volatile", "auto", "register", "restrict", "__restrict",
-	"__restrict__", "_Noreturn",
+	"__restrict__", "_Noreturn", "float", "double",
 }
 
 // Returns true if a given token represents a type.

@@ -26,6 +26,8 @@ const (
 	U16
 	U32
 	U64
+	F32
+	F64
 )
 
 // The table for x64 type casts
@@ -33,22 +35,60 @@ var i32i8x = "movsbl %al, %eax"
 var i32u8x = "movzbl %al, %eax"
 var i32i16x = "movswl %ax, %eax"
 var i32u16x = "movzwl %ax, %eax"
+var i32f32x = "cvtsi2ssl %eax, %xmm0"
 var i32i64x = "movsxd %eax, %rax"
+var i32f64x = "cvtsi2sdl %eax, %xmm0"
+
+var u32f32x = "mov %eax, %eax; cvtsi2ssq %rax, %xmm0"
 var u32i64x = "mov %eax, %eax"
+var u32f64x = "mov %eax, %eax; cvtsi2sdq %rax, %xmm0"
+
+var i64f32x = "cvtsi2ssq %rax, %xmm0"
+var i64f64x = "cvtsi2sdq %rax, %xmm0"
+
+var u64f32x = "cvtsi2ssq %rax, %xmm0"
+var u64f64x = "test %rax,%rax; js 1f; pxor %xmm0,%xmm0; cvtsi2sd %rax,%xmm0; jmp 2f; " +
+	"1: mov %rax,%rdi; and $1,%eax; pxor %xmm0,%xmm0; shr %rdi; " +
+	"or %rax,%rdi; cvtsi2sd %rdi,%xmm0; addsd %xmm0,%xmm0; 2:"
+
+var f32i8x = "cvttss2sil %xmm0, %eax; movsbl %al, %eax"
+var f32u8x = "cvttss2sil %xmm0, %eax; movzbl %al, %eax"
+var f32i16x = "cvttss2sil %xmm0, %eax; movswl %ax, %eax"
+var f32u16x = "cvttss2sil %xmm0, %eax; movzwl %ax, %eax"
+var f32i32x = "cvttss2sil %xmm0, %eax"
+var f32u32x = "cvttss2siq %xmm0, %rax"
+var f32i64x = "cvttss2siq %xmm0, %rax"
+var f32u64x = "cvttss2siq %xmm0, %rax"
+var f32f64x = "cvtss2sd %xmm0, %xmm0"
+
+var f64i8x = "cvttsd2sil %xmm0, %eax; movsbl %al, %eax"
+var f64u8x = "cvttsd2sil %xmm0, %eax; movzbl %al, %eax"
+var f64i16x = "cvttsd2sil %xmm0, %eax; movswl %ax, %eax"
+var f64u16x = "cvttsd2sil %xmm0, %eax; movzwl %ax, %eax"
+var f64i32x = "cvttsd2sil %xmm0, %eax"
+var f64u32x = "cvttsd2siq %xmm0, %rax"
+var f64f32x = "cvtsd2ss %xmm0, %xmm0"
+var f64i64x = "cvttsd2siq %xmm0, %rax"
+var f64u64x = "cvttsd2siq %xmm0, %rax"
 
 var x64CastTable = [][]string{
-	// i8   i16   i32   i64   u8   u16   u32   u64
-	{"", "", "", i32i64x, i32u8x, i32u16x, "", i32i64x},          // i8
-	{i32i8x, "", "", i32i64x, i32u8x, i32u16x, "", i32i64x},      // i16
-	{i32i8x, i32i16x, "", i32i64x, i32u8x, i32u16x, "", i32i64x}, // i32
-	{i32i8x, i32i16x, "", "", i32u8x, i32u16x, "", ""},           // i64
-	{i32i8x, "", "", i32i64x, "", "", "", i32i64x},               // u8
-	{i32i8x, i32i16x, "", i32i64x, i32u8x, "", "", i32i64x},      // u16
-	{i32i8x, i32i16x, "", u32i64x, i32u8x, i32u16x, "", u32i64x}, // u32
-	{i32i8x, i32i16x, "", "", i32u8x, i32u16x, "", ""},           // u64
+	// i8   i16   i32   i64   u8   u16   u32   u64   f32   f64
+	{"", "", "", i32i64x, i32u8x, i32u16x, "", i32i64x, i32f32x, i32f64x},               // i8
+	{i32i8x, "", "", i32i64x, i32u8x, i32u16x, "", i32i64x, i32f32x, i32f64x},           // i16
+	{i32i8x, i32i16x, "", i32i64x, i32u8x, i32u16x, "", i32i64x, i32f32x, i32f64x},      // i32
+	{i32i8x, i32i16x, "", "", i32u8x, i32u16x, "", "", i64f32x, i64f64x},                // i64
+	{i32i8x, "", "", i32i64x, "", "", "", i32i64x, i32f32x, i32f64x},                    // u8
+	{i32i8x, i32i16x, "", i32i64x, i32u8x, "", "", i32i64x, i32f32x, i32f64x},           // u16
+	{i32i8x, i32i16x, "", u32i64x, i32u8x, i32u16x, "", u32i64x, u32f32x, u32f64x},      // u32
+	{i32i8x, i32i16x, "", "", i32u8x, i32u16x, "", "", u64f32x, u64f64x},                // u64
+	{f32i8x, f32i16x, f32i32x, f32i64x, f32u8x, f32u16x, f32u32x, f32u64x, "", f32f64x}, // f32
+	{f64i8x, f64i16x, f64i32x, f64i64x, f64u8x, f64u16x, f64u32x, f64u64x, f64f32x, ""}, // f64
 }
 
 // The table for riscv type casts
+var i32f32r = "fcvt.s.w fa0, a0"
+var i32f64r = "fcvt.d.w fa0, a0"
+
 var i64i8r = fmt.Sprint("slli a0, a0, 56\n", "  srai a0, a0, 56")
 var i64u8r = fmt.Sprint("slli a0, a0, 56\n", "  srli a0, a0, 56")
 var i64i16r = fmt.Sprint("slli a0, a0, 48\n", "  srai a0, a0, 48")
@@ -56,18 +96,53 @@ var i64u16r = fmt.Sprint("slli a0, a0, 48\n", "  srli a0, a0, 48")
 var i64i32r = fmt.Sprint("slli a0, a0, 32\n", "  srai a0, a0, 32")
 var i64u32r = fmt.Sprint("slli a0, a0, 32\n", "  srli a0, a0, 32")
 
+var i64f32r = "fcvt.s.l fa0, a0"
+var i64f64r = "fcvt.d.l fa0, a0"
+
+var u32f32r = "fcvt.s.wu fa0, a0"
+var u32f64r = "fcvt.d.wu fa0, a0"
+
 var u32i64r = fmt.Sprint("slli a0, a0, 32\n", "  srli a0, a0, 32")
 
+var u64f32r = "fcvt.s.lu fa0, a0"
+var u64f64r = "fcvt.d.lu fa0, a0"
+
+var f32i8r = fmt.Sprint("fcvt.w.s a0, fa0, rtz\n", "  slli a0, a0, 56\n", "  srai a0, a0, 56")
+var f32i16r = fmt.Sprint("fcvt.w.s a0, fa0, rtz\n", "  slli a0, a0, 48\n", "  srai a0, a0, 48")
+var f32i32r = fmt.Sprint("fcvt.w.s a0, fa0, rtz\n", "  slli a0, a0, 32\n", "  srai a0, a0, 32")
+var f32i64r = "fcvt.l.s a0, fa0, rtz"
+
+var f32u8r = fmt.Sprint("fcvt.wu.s a0, fa0, rtz\n", "  slli a0, a0, 56\n", "  srli a0, a0, 56")
+var f32u16r = fmt.Sprint("fcvt.wu.s a0, fa0, rtz\n", "  slli a0, a0, 48\n", "  srli a0, a0, 48\n")
+var f32u32r = fmt.Sprint("fcvt.wu.s a0, fa0, rtz\n", "  slli a0, a0, 32\n", "  srai a0, a0, 32")
+var f32u64r = "fcvt.lu.s a0, fa0, rtz"
+
+var f32f64r = "fcvt.d.s fa0, fa0"
+
+var f64i8r = fmt.Sprint("fcvt.w.d a0, fa0, rtz\n", "  slli a0, a0, 56\n", "  srai a0, a0, 56")
+var f64i16r = fmt.Sprint("fcvt.w.d a0, fa0, rtz\n", "  slli a0, a0, 48\n", "  srai a0, a0, 48")
+var f64i32r = fmt.Sprint("fcvt.w.d a0, fa0, rtz\n", "  slli a0, a0, 32\n", "  srai a0, a0, 32")
+var f64i64r = "fcvt.l.d a0, fa0, rtz"
+
+var f64u8r = fmt.Sprint("fcvt.wu.d a0, fa0, rtz\n", "  slli a0, a0, 56\n", "  srli a0, a0, 56")
+var f64u16r = fmt.Sprint("fcvt.wu.d a0, fa0, rtz\n", "  slli a0, a0, 48\n", "  srli a0, a0, 48")
+var f64u32r = fmt.Sprint("fcvt.wu.d a0, fa0, rtz\n", "  slli a0, a0, 32\n", "  srai a0, a0, 32")
+var f64u64r = "fcvt.lu.d a0, fa0, rtz"
+
+var f64f32r = "fcvt.s.d fa0, fa0"
+
 var riscvCastTable = [][]string{
-	// i8   i16   i32   i64   u8   u16   u32   u64
-	{"", "", "", "", i64u8r, i64u16r, i64u32r, ""},                    // i8
-	{i64i8r, "", "", "", i64u8r, i64u16r, i64u32r, ""},                // i16
-	{i64i8r, i64i16r, "", "", i64u8r, i64u16r, i64u32r, ""},           // i32
-	{i64i8r, i64i16r, i64i32r, "", i64u8r, i64u16r, i64u32r, ""},      // i64
-	{i64i8r, "", "", "", "", "", "", ""},                              // u8
-	{i64i8r, i64i16r, "", "", i64u8r, "", "", ""},                     // u16
-	{i64i8r, i64i16r, i64i32r, u32i64r, i64u8r, i64u16r, "", u32i64r}, // u32
-	{i64i8r, i64i16r, i64i32r, "", i64u8r, i64u16r, i64u32r, ""},      // u64
+	// i8   i16   i32   i64   u8   u16   u32   u64   f32   f64
+	{"", "", "", "", i64u8r, i64u16r, i64u32r, "", i32f32r, i32f64r},                    // i8
+	{i64i8r, "", "", "", i64u8r, i64u16r, i64u32r, "", i32f32r, i32f64r},                // i16
+	{i64i8r, i64i16r, "", "", i64u8r, i64u16r, i64u32r, "", i32f32r, i32f64r},           // i32
+	{i64i8r, i64i16r, i64i32r, "", i64u8r, i64u16r, i64u32r, "", i64f32r, i64f64r},      // i64
+	{i64i8r, "", "", "", "", "", "", "", u32f32r, u32f64r},                              // u8
+	{i64i8r, i64i16r, "", "", i64u8r, "", "", "", u32f32r, u32f64r},                     // u16
+	{i64i8r, i64i16r, i64i32r, u32i64r, i64u8r, i64u16r, "", u32i64r, u32f32r, u32f64r}, // u32
+	{i64i8r, i64i16r, i64i32r, "", i64u8r, i64u16r, i64u32r, "", u64f32r, u64f64r},      // u64
+	{f32i8r, f32i16r, f32i32r, f32i64r, f32u8r, f32u16r, f32u32r, f32u64r, "", f32f64r}, // f32
+	{f64i8r, f64i16r, f64i32r, f64i64r, f64u8r, f64u16r, f64u32r, f64u64r, f64f32r, ""}, // f64
 }
 
 func getTypeId(ty *Type) int {
@@ -96,6 +171,10 @@ func getTypeId(ty *Type) int {
 		} else {
 			return I64
 		}
+	case TY_FLOAT:
+		return F32
+	case TY_DOUBLE:
+		return F64
 	}
 	return U64
 }
@@ -155,7 +234,14 @@ func (a X64) pop(arg string) {
 
 // Load a value from where %rax is pointing to.
 func (a X64) load(ty *Type) {
-	if ty.kind == TY_ARRAY || ty.kind == TY_STRUCT || ty.kind == TY_UNION {
+	switch ty.kind {
+	case TY_ARRAY, TY_STRUCT, TY_UNION:
+		return
+	case TY_FLOAT:
+		println("  movss (%%rax), %%xmm0")
+		return
+	case TY_DOUBLE:
+		println("  movsd (%%rax), %%xmm0")
 		return
 	}
 
@@ -182,11 +268,18 @@ func (a X64) load(ty *Type) {
 func (a X64) store(ty *Type) {
 	a.pop("%rdi")
 
-	if ty.kind == TY_STRUCT || ty.kind == TY_UNION {
+	switch ty.kind {
+	case TY_STRUCT, TY_UNION:
 		for i := range ty.size {
 			println("  mov %d(%%rax), %%r8b", i)
 			println("  mov %%r8b, %d(%%rdi)", i)
 		}
+		return
+	case TY_FLOAT:
+		println("  movss %%xmm0, (%%rdi)")
+		return
+	case TY_DOUBLE:
+		println("  movsd %%xmm0, (%%rdi)")
 		return
 	}
 
@@ -768,7 +861,14 @@ func (a RiscV) pop(arg string) {
 
 // Load a value from where %rax is pointing to.
 func (a RiscV) load(ty *Type) {
-	if ty.kind == TY_ARRAY || ty.kind == TY_STRUCT || ty.kind == TY_UNION {
+	switch ty.kind {
+	case TY_ARRAY, TY_STRUCT, TY_UNION:
+		return
+	case TY_FLOAT:
+		println("  flw fa0, 0(a0)")
+		return
+	case TY_DOUBLE:
+		println("  fld fa0, 0(a0)")
 		return
 	}
 
@@ -793,7 +893,8 @@ func (a RiscV) load(ty *Type) {
 func (a RiscV) store(ty *Type) {
 	a.pop("a1")
 
-	if ty.kind == TY_STRUCT || ty.kind == TY_UNION {
+	switch ty.kind {
+	case TY_STRUCT, TY_UNION:
 		for i := range ty.size {
 			println("  li t0, %d", i)
 			println("  add t0, a0, t0")
@@ -803,6 +904,12 @@ func (a RiscV) store(ty *Type) {
 			println("  add t0, a1, t0")
 			println("  sb t1, 0(t0)")
 		}
+		return
+	case TY_FLOAT:
+		println("  fsw fa0, 0(a1)")
+		return
+	case TY_DOUBLE:
+		println("  fsd fa0, 0(a1)")
 		return
 	}
 
