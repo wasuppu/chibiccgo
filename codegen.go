@@ -99,6 +99,10 @@ func (a X64) genAddr(node *Node) {
 	case ND_DEREF:
 		a.genExpr(node.lhs)
 		return
+	case ND_COMMA:
+		a.genExpr(node.lhs)
+		a.genAddr(node.rhs)
+		return
 	}
 
 	failTok(node.tok, "not an lvalue")
@@ -137,6 +141,10 @@ func (a X64) genExpr(node *Node) {
 		for n := node.body; n != nil; n = n.next {
 			a.genStmt(n)
 		}
+		return
+	case ND_COMMA:
+		a.genExpr(node.lhs)
+		a.genExpr(node.rhs)
 		return
 	case ND_FUNCALL:
 		nargs := 0
@@ -351,6 +359,10 @@ func (a RiscV) genAddr(node *Node) {
 	case ND_DEREF:
 		a.genExpr(node.lhs)
 		return
+	case ND_COMMA:
+		a.genExpr(node.lhs)
+		a.genAddr(node.rhs)
+		return
 	}
 
 	failTok(node.tok, "not an lvalue")
@@ -389,6 +401,10 @@ func (a RiscV) genExpr(node *Node) {
 		for n := node.body; n != nil; n = n.next {
 			a.genStmt(n)
 		}
+		return
+	case ND_COMMA:
+		a.genExpr(node.lhs)
+		a.genExpr(node.rhs)
 		return
 	case ND_FUNCALL:
 		nargs := 0

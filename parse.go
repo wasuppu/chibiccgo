@@ -47,6 +47,7 @@ const (
 	ND_LT                        // <
 	ND_LE                        // <=
 	ND_ASSIGN                    // =
+	ND_COMMA                     // ,
 	ND_ADDR                      // unary &
 	ND_DEREF                     // unary *
 	ND_RETURN                    // "return"
@@ -430,9 +431,16 @@ func exprStmt(rest **Token, tok *Token) *Node {
 	return node
 }
 
-// expr = assign
+// expr = assign ("," expr)?
 func expr(rest **Token, tok *Token) *Node {
-	return assign(rest, tok)
+	node := assign(&tok, tok)
+
+	if tok.equal(",") {
+		return NewBinary(ND_COMMA, node, expr(rest, tok.next), tok)
+	}
+
+	*rest = tok
+	return node
 }
 
 // assign = equality ("=" assign)?

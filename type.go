@@ -99,6 +99,9 @@ func (node *Node) addType() {
 	case ND_VAR:
 		node.ty = node.vara.ty
 		return
+	case ND_COMMA:
+		node.ty = node.rhs.ty
+		return
 	case ND_ADDR:
 		if node.lhs.ty.kind == TY_ARRAY {
 			node.ty = pointerTo(node.lhs.ty.base)
