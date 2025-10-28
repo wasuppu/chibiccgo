@@ -24,7 +24,7 @@ func chooseArch(arch string) Arch {
 }
 
 type Arch interface {
-	genCode(prog *Obj)
+	emitText(prog *Obj)
 }
 
 type X64 struct{}
@@ -76,7 +76,13 @@ func (a X64) store() {
 func (a X64) genAddr(node *Node) {
 	switch node.kind {
 	case ND_VAR:
-		fmt.Printf("  lea %d(%%rbp), %%rax\n", node.vara.offset)
+		if node.vara.isLocal {
+			// Local variable
+			fmt.Printf("  lea %d(%%rbp), %%rax\n", node.vara.offset)
+		} else {
+			// Global variable
+			fmt.Printf("  lea %s(%%rip), %%rax\n", node.vara.name)
+		}
 		return
 	case ND_DEREF:
 		a.genExpr(node.lhs)
@@ -220,7 +226,7 @@ func (a X64) genStmt(node *Node) {
 	failTok(node.tok, "invalid statement")
 }
 
-func (a X64) genCode(prog *Obj) {
+func (a X64) emitText(prog *Obj) {
 	for fn := prog; fn != nil; fn = fn.next {
 		if !fn.isFunction {
 			continue
@@ -302,7 +308,11 @@ func (a RiscV) store() {
 func (a RiscV) genAddr(node *Node) {
 	switch node.kind {
 	case ND_VAR:
-		fmt.Printf("  addi a0, fp, %d\n", node.vara.offset)
+		if node.vara.isLocal {
+			fmt.Printf("  addi a0, fp, %d\n", node.vara.offset)
+		} else {
+			fmt.Printf("  la a0, %s\n", node.vara.name)
+		}
 		return
 	case ND_DEREF:
 		a.genExpr(node.lhs)
@@ -443,7 +453,7 @@ func (a RiscV) genStmt(node *Node) {
 	failTok(node.tok, "invalid statement")
 }
 
-func (a RiscV) genCode(prog *Obj) {
+func (a RiscV) emitText(prog *Obj) {
 	for fn := prog; fn != nil; fn = fn.next {
 		if !fn.isFunction {
 			continue
@@ -469,11 +479,25 @@ func (a RiscV) genCode(prog *Obj) {
 	}
 }
 
+func emitData(prog *Obj) {
+	for vara := prog; vara != nil; vara = vara.next {
+		if vara.isFunction {
+			continue
+		}
+
+		fmt.Printf("  .data\n")
+		fmt.Printf("  .globl %s\n", vara.name)
+		fmt.Printf("%s:\n", vara.name)
+		fmt.Printf("  .zero %d\n", vara.ty.size)
+	}
+}
+
 func codegen(arch string, prog *Obj) {
 	assignLVarOffsets(prog)
+	emitData(prog)
 
 	target := chooseArch(arch)
-	target.genCode(prog)
+	target.emitText(prog)
 }
 
 // Round up `n` to the nearest multiple of `align`. For instance,

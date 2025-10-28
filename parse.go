@@ -88,6 +88,13 @@ func findVar(tok *Token) *Obj {
 			return vara
 		}
 	}
+
+	for vara := globals; vara != nil; vara = vara.next {
+		if len(vara.name) == tok.len && tok.lexeme == vara.name {
+			return vara
+		}
+	}
+
 	return nil
 }
 
@@ -655,13 +662,48 @@ func function(tok *Token, basety *Type) *Token {
 	return tok
 }
 
+func globalVariable(tok *Token, basety *Type) *Token {
+	first := true
+
+	for !consume(&tok, tok, ";") {
+		if !first {
+			tok = tok.skip(",")
+		}
+		first = false
+
+		ty := declarator(&tok, tok, basety)
+		NewGVar(getIdent(ty.name), ty)
+	}
+	return tok
+}
+
+// Lookahead tokens and returns true if a given token is a start
+// of a function definition or declaration.
+func isFunction(tok *Token) bool {
+	if tok.equal(";") {
+		return false
+	}
+
+	dummy := Type{}
+	ty := declarator(&tok, tok, &dummy)
+	return ty.kind == TY_FUNC
+}
+
 // program = (function-definition | global-variable)*
 func parse(tok *Token) *Obj {
 	globals = nil
 
 	for tok.kind != TK_EOF {
 		basety := declspec(&tok, tok)
-		tok = function(tok, basety)
+
+		// Function
+		if isFunction(tok) {
+			tok = function(tok, basety)
+			continue
+		}
+
+		// Global variable
+		tok = globalVariable(tok, basety)
 	}
 
 	return globals
