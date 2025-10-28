@@ -851,15 +851,19 @@ func (a X64) emitText(prog *Obj) {
 
 		// Save arg registers if function is variadic
 		if fn.vaArea != nil {
-			gp := 0
+			gp, fp := 0, 0
 			for vara := fn.params; vara != nil; vara = vara.next {
-				gp++
+				if vara.ty.isFlonum() {
+					fp++
+				} else {
+					gp++
+				}
 			}
 			off := fn.vaArea.offset
 
 			// va_elem
 			println("  movl $%d, %d(%%rbp)", gp*8, off)
-			println("  movl $0, %d(%%rbp)", off+4)
+			println("  movl $%d, %d(%%rbp)", fp*8+48, off+4)
 			println("  movq %%rbp, %d(%%rbp)", off+16)
 			println("  addq $%d, %d(%%rbp)", off+24, off+16)
 
