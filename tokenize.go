@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"slices"
 	"strconv"
@@ -11,6 +12,7 @@ import (
 
 var source string
 var currentInputLoc int
+var currentFilename string
 
 var kws = []string{"return", "if", "else", "for", "while", "int", "sizeof", "char"}
 
@@ -211,7 +213,8 @@ func convertKeywords(tok *Token) {
 }
 
 // Tokenize a given string and returns new tokens.
-func tokenize(input string) *Token {
+func tokenize(filename string, input string) *Token {
+	currentFilename = filename
 	source = input
 	head := Token{}
 	cur := &head
@@ -271,6 +274,31 @@ func tokenize(input string) *Token {
 	cur.next = NewToken(TK_EOF, p, 0, "")
 	convertKeywords(head.next)
 	return head.next
+}
+
+// Returns the contents of a given file.
+func readFile(path string) string {
+	var data []byte
+	var err error
+
+	if path == "-" {
+		data, err = io.ReadAll(os.Stdin)
+	} else {
+		data, err = os.ReadFile(path)
+	}
+	if err != nil {
+		fail(fmt.Sprint("fail to read source:", err))
+	}
+
+	content := string(data)
+	if len(content) > 0 && content[len(content)-1] != '\n' {
+		content += "\n"
+	}
+	return content
+}
+
+func tokenizeFile(path string) *Token {
+	return tokenize(path, readFile(path))
 }
 
 func parseNumber(s string, pos int) (int, int) {

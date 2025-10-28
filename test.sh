@@ -34,7 +34,7 @@ assert() {
     expected=$1
     input=$2
 
-    ./chibicc $arch "$input" > tmp.s || exit
+    echo "$input" | ./chibicc $arch - > tmp.s || exit
     eval $build_cmd
     eval $run_cmd
     actual="$?"

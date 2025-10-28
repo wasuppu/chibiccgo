@@ -14,10 +14,36 @@ func fail(format string, args ...any) {
 	os.Exit(1)
 }
 
-// Reports an error location and exit.
+// Reports an error message in the following format and exit.
+// foo.c:10: x = y + 1;
+// ^ <error message here>
 func failAt(loc int, format string, args ...any) {
-	pos := currentInputLoc - loc
-	fmt.Fprintln(os.Stderr, source[currentInputLoc:])
+	// Find a line containing `loc`.
+	line := loc
+	for currentInputLoc < line && source[line-1] != '\n' {
+		line--
+	}
+
+	end := loc
+	for source[end] != '\n' {
+		end++
+	}
+
+	// Get a line number.
+	lineno := 1
+	for p := currentInputLoc; p < line; p++ {
+		if source[p] == '\n' {
+			lineno++
+		}
+	}
+
+	// Print out the line.
+	indent, _ := fmt.Fprintf(os.Stderr, "%s:%d: ", currentFilename, lineno)
+	fmt.Fprintf(os.Stderr, "%.*s\n", end-line, source[line:])
+
+	// Show the error message.
+	pos := loc - line + indent
+
 	fmt.Fprintf(os.Stderr, "%*s", pos, "") // print pos spaces
 	fmt.Fprint(os.Stderr, "^ ")
 	fmt.Fprintf(os.Stderr, format+"\n", args...)

@@ -10,7 +10,7 @@ func main() {
 	}
 
 	// Tokenize and parse.
-	tok := tokenize(os.Args[2])
+	tok := tokenizeFile(os.Args[2])
 	prog := parse(tok)
 
 	// Traverse the AST to emit assembly.
