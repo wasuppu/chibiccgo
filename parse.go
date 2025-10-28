@@ -1192,6 +1192,22 @@ func lvarInitializer(rest **Token, tok *Token, vara *Obj) *Node {
 	return NewBinary(ND_COMMA, lhs, rhs, tok)
 }
 
+func readBuf(buf []byte, sz int) uint64 {
+	switch sz {
+	case 1:
+		return uint64(buf[0])
+	case 2:
+		return uint64(binary.LittleEndian.Uint16(buf))
+	case 4:
+		return uint64(binary.LittleEndian.Uint32(buf))
+	case 8:
+		return uint64(binary.LittleEndian.Uint64(buf))
+	default:
+		unreachable()
+		return 0
+	}
+}
+
 func writeBuf(buf []byte, val uint64, sz int) {
 	switch sz {
 	case 1:
@@ -1218,7 +1234,21 @@ func writeGVarData(cur *Relocation, init *Initializer, ty *Type, buf []byte, off
 
 	if ty.kind == TY_STRUCT {
 		for mem := ty.members; mem != nil; mem = mem.next {
-			cur = writeGVarData(cur, init.children[mem.idx], mem.ty, buf, offset+mem.offset)
+			if mem.isBitfield {
+				expr := init.children[mem.idx].expr
+				if expr == nil {
+					break
+				}
+
+				loc := buf[offset+mem.offset:]
+				oldval := readBuf(loc, mem.ty.size)
+				newval := uint64(eval(expr))
+				mask := uint64((1 << mem.bitWidth) - 1)
+				combined := oldval | ((newval & mask) << uint64(mem.bitOffset))
+				writeBuf(loc, combined, mem.ty.size)
+			} else {
+				cur = writeGVarData(cur, init.children[mem.idx], mem.ty, buf, offset+mem.offset)
+			}
 		}
 		return cur
 	}
