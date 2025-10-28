@@ -482,7 +482,7 @@ const (
 // | "typedef" | "static" | "extern"
 // | "signed" | "unsigned"
 // | struct-decl | union-decl | typedef-name
-// | enum-specifier
+// | enum-specifier | typeof-specifier
 // | "const" | "volatile" | "auto" | "register" | "restrict"
 // | "__restrict" | "__restrict__" | "_Noreturn")+
 func declspec(rest **Token, tok *Token, attr *VarAttr) *Type {
@@ -536,7 +536,8 @@ func declspec(rest **Token, tok *Token, attr *VarAttr) *Type {
 
 		// Handle user-defined types.
 		ty2 := findTypedef(tok)
-		if tok.equal("struct") || tok.equal("union") || tok.equal("enum") || ty2 != nil {
+		if tok.equal("struct") || tok.equal("union") || tok.equal("enum") ||
+			tok.equal("typeof") || ty2 != nil {
 			if counter != 0 {
 				break
 			}
@@ -547,6 +548,8 @@ func declspec(rest **Token, tok *Token, attr *VarAttr) *Type {
 				ty = unionDecl(&tok, tok.next)
 			} else if tok.equal("enum") {
 				ty = enumSpecifier(&tok, tok.next)
+			} else if tok.equal("typeof") {
+				ty = typeofSpecifier(&tok, tok.next)
 			} else {
 				ty = ty2
 				tok = tok.next
@@ -851,6 +854,22 @@ func enumSpecifier(rest **Token, tok *Token) *Type {
 	if tag != nil {
 		pushTagScope(tag, ty)
 	}
+	return ty
+}
+
+// typeof-specifier = "(" (expr | typename) ")"
+func typeofSpecifier(rest **Token, tok *Token) *Type {
+	tok = tok.skip("(")
+
+	var ty *Type
+	if isTypename(tok) {
+		ty = typename(&tok, tok)
+	} else {
+		node := expr(&tok, tok)
+		node.addType()
+		ty = node.ty
+	}
+	*rest = tok.skip(")")
 	return ty
 }
 
@@ -1505,7 +1524,7 @@ var typenames = []string{
 	"void", "_Bool", "char", "short", "int", "long", "struct", "union",
 	"typedef", "enum", "static", "extern", "_Alignas", "signed", "unsigned",
 	"const", "volatile", "auto", "register", "restrict", "__restrict",
-	"__restrict__", "_Noreturn", "float", "double",
+	"__restrict__", "_Noreturn", "float", "double", "typeof",
 }
 
 // Returns true if a given token represents a type.
