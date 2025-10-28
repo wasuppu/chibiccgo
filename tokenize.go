@@ -98,7 +98,25 @@ func isKeyword(tok *Token) bool {
 	return slices.ContainsFunc(kws, tok.equal)
 }
 
-func readEscapedChar(p int) byte {
+func readEscapedChar(newPos *int, p int) byte {
+	if '0' <= source[p] && source[p] <= '7' {
+		// Read an octal number.
+		c := source[p] - '0'
+		p++
+		if '0' <= source[p] && source[p] <= '7' {
+			c = (c << 3) + (source[p] - '0')
+			p++
+			if '0' <= source[p] && source[p] <= '7' {
+				c = (c << 3) + (source[p] - '0')
+				p++
+			}
+		}
+		*newPos = p
+		return c
+	}
+
+	*newPos = p + 1
+
 	switch source[p] {
 	case 'a':
 		return '\a'
@@ -144,9 +162,8 @@ func readStringLiteral(start int) *Token {
 
 	for p := start + 1; p < end; {
 		if source[p] == '\\' {
-			buf[len] = readEscapedChar(p + 1)
+			buf[len] = readEscapedChar(&p, p+1)
 			len++
-			p += 2
 		} else {
 			buf[len] = source[p]
 			len++
