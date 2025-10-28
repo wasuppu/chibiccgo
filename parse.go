@@ -993,22 +993,47 @@ func designation(rest **Token, tok *Token, init *Initializer) {
 	initializer2(rest, tok, init)
 }
 
+// An array length can be omitted if an array has an initializer
+// (e.g. `int x[] = {1,2,3}`). If it's omitted, count the number
+// of initializer elements.
 func countArrayInitElements(tok *Token, ty *Type) int {
-	dummy := NewInitializer(ty.base, false)
-	i := 0
+	first := true
+	dummy := NewInitializer(ty.base, true)
 
-	for ; !consumeEnd(&tok, tok); i++ {
-		if i > 0 {
+	i, m := 0, 0
+
+	for !consumeEnd(&tok, tok) {
+		if !first {
 			tok = tok.skip(",")
 		}
-		initializer2(&tok, tok, dummy)
+		first = false
+
+		if tok.equal("[") {
+			i = int(constExpr(&tok, tok.next))
+			if tok.equal("...") {
+				i = int(constExpr(&tok, tok.next))
+			}
+			tok = tok.skip("]")
+			designation(&tok, tok, dummy)
+		} else {
+			initializer2(&tok, tok, dummy)
+		}
+
+		i++
+		m = max(m, i)
 	}
-	return i
+	return m
 }
 
 // array-initializer1 = "{" initializer ("," initializer)* ","? "}"
 func arrayInitializer1(rest **Token, tok *Token, init *Initializer) {
 	tok = tok.skip("{")
+
+	if init.isFlexible {
+		len := countArrayInitElements(tok, init.ty)
+		*init = *NewInitializer(arrayOf(init.ty.base, len), false)
+	}
+
 	first := true
 
 	if init.isFlexible {
