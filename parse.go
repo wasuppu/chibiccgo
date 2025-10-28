@@ -4,18 +4,23 @@ package main
 // accumulated to this list.
 var locals *Obj
 
-// Local variable
-type Obj struct {
-	next   *Obj
-	name   string // Variable name
-	ty     *Type  // Type
-	offset int    // Offset from RBP
-}
+// Likewise, global variables are accumulated to this list.
+var globals *Obj
 
-// Function
-type Function struct {
-	next      *Function
-	name      string
+// Variable or function
+type Obj struct {
+	next    *Obj
+	name    string // Variable name
+	ty      *Type  // Type
+	isLocal bool   // local or global/function
+
+	// Local variable
+	offset int
+
+	// Global variable or function
+	isFunction bool
+
+	// Function
 	params    *Obj
 	body      *Node
 	locals    *Obj
@@ -123,9 +128,25 @@ func NewVarNode(vara *Obj, tok *Token) *Node {
 	return node
 }
 
+func NewVar(name string, ty *Type) *Obj {
+	return &Obj{
+		name: name,
+		ty:   ty,
+	}
+}
+
 func NewLVar(name string, ty *Type) *Obj {
-	vara := &Obj{name: name, ty: ty, next: locals}
+	vara := NewVar(name, ty)
+	vara.isLocal = true
+	vara.next = locals
 	locals = vara
+	return vara
+}
+
+func NewGVar(name string, ty *Type) *Obj {
+	vara := NewVar(name, ty)
+	vara.next = globals
+	globals = vara
 	return vara
 }
 
@@ -618,31 +639,30 @@ func createParamLvars(param *Type) {
 	}
 }
 
-func function(rest **Token, tok *Token) *Function {
-	ty := declspec(&tok, tok)
-	ty = declarator(&tok, tok, ty)
+func function(tok *Token, basety *Type) *Token {
+	ty := declarator(&tok, tok, basety)
+
+	fn := NewGVar(getIdent(ty.name), ty)
+	fn.isFunction = true
 
 	locals = nil
-
-	fn := &Function{name: getIdent(ty.name)}
 	createParamLvars(ty.params)
 	fn.params = locals
 
 	tok = tok.skip("{")
-	fn.body = compoundStmt(rest, tok)
+	fn.body = compoundStmt(&tok, tok)
 	fn.locals = locals
-	return fn
+	return tok
 }
 
-// program = function-definition*
-func parse(tok *Token) *Function {
-	head := Function{}
-	cur := &head
+// program = (function-definition | global-variable)*
+func parse(tok *Token) *Obj {
+	globals = nil
 
 	for tok.kind != TK_EOF {
-		cur.next = function(&tok, tok)
-		cur = cur.next
+		basety := declspec(&tok, tok)
+		tok = function(tok, basety)
 	}
 
-	return head.next
+	return globals
 }

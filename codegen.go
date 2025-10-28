@@ -5,7 +5,7 @@ import (
 )
 
 var depth int
-var currentGenFn *Function
+var currentGenFn *Obj
 
 var x64ArgReg = []string{"%rdi", "%rsi", "%rdx", "%rcx", "%r8", "%r9"}
 var argRegR = []string{"a0", "a1", "a2", "a3", "a4", "a5"}
@@ -24,13 +24,14 @@ func chooseArch(arch string) Arch {
 }
 
 type Arch interface {
-	genCode(prog *Function)
+	genCode(prog *Obj)
 }
 
 type X64 struct{}
 
 func (a X64) prologue(fname string, stackSize int) {
 	fmt.Printf("  .globl %s\n", fname)
+	fmt.Printf("  .text\n")
 	fmt.Printf("%s:\n", fname)
 
 	fmt.Printf("  push %%rbp\n")
@@ -219,8 +220,12 @@ func (a X64) genStmt(node *Node) {
 	failTok(node.tok, "invalid statement")
 }
 
-func (a X64) genCode(prog *Function) {
+func (a X64) genCode(prog *Obj) {
 	for fn := prog; fn != nil; fn = fn.next {
+		if !fn.isFunction {
+			continue
+		}
+
 		// Prologue
 		a.prologue(fn.name, fn.stackSize)
 		currentGenFn = fn
@@ -245,6 +250,7 @@ type RiscV struct{}
 
 func (a RiscV) prologue(fname string, stackSize int) {
 	fmt.Printf("  .globl %s\n", fname)
+	fmt.Printf("  .text\n")
 	fmt.Printf("%s:\n", fname)
 
 	fmt.Printf("  addi sp, sp, -16\n")
@@ -437,8 +443,12 @@ func (a RiscV) genStmt(node *Node) {
 	failTok(node.tok, "invalid statement")
 }
 
-func (a RiscV) genCode(prog *Function) {
+func (a RiscV) genCode(prog *Obj) {
 	for fn := prog; fn != nil; fn = fn.next {
+		if !fn.isFunction {
+			continue
+		}
+
 		// Prologue
 		a.prologue(fn.name, fn.stackSize)
 		currentGenFn = fn
@@ -459,7 +469,7 @@ func (a RiscV) genCode(prog *Function) {
 	}
 }
 
-func codegen(arch string, prog *Function) {
+func codegen(arch string, prog *Obj) {
 	assignLVarOffsets(prog)
 
 	target := chooseArch(arch)
@@ -473,8 +483,11 @@ func alignTo(n, align int) int {
 }
 
 // Assign offsets to local variables.
-func assignLVarOffsets(prog *Function) {
+func assignLVarOffsets(prog *Obj) {
 	for fn := prog; fn != nil; fn = fn.next {
+		if !fn.isFunction {
+			continue
+		}
 		offset := 0
 		for vara := fn.locals; vara != nil; vara = vara.next {
 			offset += vara.ty.size
