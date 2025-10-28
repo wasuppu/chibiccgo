@@ -46,6 +46,10 @@ type Initializer struct {
 	// If it's an initializer for an aggregate type (e.g. array or struct),
 	// `children` has initializers for its children.
 	children []*Initializer
+
+	// Only one member can be initialized for a union.
+	// `mem` is used to clarify which member is initialized.
+	mem *Member
 }
 
 // For local variable initializer.
@@ -1021,6 +1025,13 @@ func designation(rest **Token, tok *Token, init *Initializer) {
 		return
 	}
 
+	if tok.equal(".") && init.ty.kind == TY_UNION {
+		mem := structDesignator(&tok, tok, init.ty)
+		init.mem = mem
+		designation(rest, tok, init.children[mem.idx])
+		return
+	}
+
 	if tok.equal(".") {
 		failTok(tok, "field name not in struct or union initializer")
 	}
@@ -1175,7 +1186,18 @@ func structInitializer2(rest **Token, tok *Token, init *Initializer, mem *Member
 
 func unionInitializer(rest **Token, tok *Token, init *Initializer) {
 	// Unlike structs, union initializers take only one initializer,
-	// and that initializes the first union member.
+	// and that initializes the first union member by default.
+	// You can initialize other member using a designated initializer.
+	if tok.equal("{") && tok.next.equal(".") {
+		mem := structDesignator(&tok, tok.next, init.ty)
+		init.mem = mem
+		designation(&tok, tok, init.children[mem.idx])
+		*rest = tok.skip("}")
+		return
+	}
+
+	init.mem = init.ty.members
+
 	if tok.equal("{") {
 		initializer2(&tok, tok.next, init.children[0])
 		consume(&tok, tok, ",")
@@ -1316,8 +1338,14 @@ func createLVarInit(init *Initializer, ty *Type, desg *InitDesg, tok *Token) *No
 	}
 
 	if ty.kind == TY_UNION {
-		desg2 := InitDesg{next: desg, idx: 0, member: ty.members}
-		return createLVarInit(init.children[0], ty.members.ty, &desg2, tok)
+		var mem *Member
+		if init.mem != nil {
+			mem = init.mem
+		} else {
+			mem = ty.members
+		}
+		desg2 := InitDesg{next: desg, idx: 0, member: mem}
+		return createLVarInit(init.children[mem.idx], mem.ty, &desg2, tok)
 	}
 
 	if init.expr == nil {
@@ -1415,7 +1443,10 @@ func writeGVarData(cur *Relocation, init *Initializer, ty *Type, buf []byte, off
 	}
 
 	if ty.kind == TY_UNION {
-		return writeGVarData(cur, init.children[0], ty.members.ty, buf, offset)
+		if init.mem == nil {
+			return cur
+		}
+		return writeGVarData(cur, init.children[init.mem.idx], init.mem.ty, buf, offset)
 	}
 
 	if init.expr == nil {
