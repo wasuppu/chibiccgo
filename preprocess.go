@@ -182,6 +182,39 @@ func skipCondIncl(tok *Token) *Token {
 	return tok
 }
 
+// Double-quote a given string and returns it.
+func quotaString(str string) string {
+	bufsize := 3
+	for i := 0; str[i] != '\x00'; i++ {
+		if str[i] == '\\' || str[i] == '"' {
+			bufsize++
+		}
+		bufsize++
+	}
+
+	buf := make([]byte, bufsize)
+	p := 0
+	buf[p] = '"'
+	p++
+	for i := 0; str[i] != '\x00'; i++ {
+		if str[i] == '\\' || str[i] == '"' {
+			buf[p] = '\\'
+			p++
+		}
+		buf[p] = str[i]
+		p++
+	}
+	buf[p] = '"'
+	p++
+	buf[p] = '\x00'
+	return string(buf)
+}
+
+func newStrToken(str string, tmpl *Token) *Token {
+	buf := quotaString(str)
+	return tokenize(newFile(tmpl.file.name, tmpl.file.fileno, buf))
+}
+
 // Copy all tokens until the next newline, terminate them with
 // an EOF token and then returns them. This function is used to
 // create a new list of tokens for `#if` arguments.
@@ -358,16 +391,64 @@ func findArg(args *MacroArg, tok *Token) *MacroArg {
 	return nil
 }
 
+// Concatenates all tokens in `tok` and returns a new string.
+func joinTokens(tok *Token) string {
+	// Compute the length of the resulting token.
+	l := 1
+	for t := tok; t != nil && t.kind != TK_EOF; t = t.next {
+		if t != tok && t.hasSpace {
+			l++
+		}
+		l += t.len
+	}
+
+	buf := make([]byte, l)
+
+	// Copy token texts.
+	pos := 0
+	for t := tok; t != nil && t.kind != TK_EOF; t = t.next {
+		if t != tok && t.hasSpace {
+			buf[pos] = ' '
+			pos++
+		}
+		copy(buf[pos:], []byte(t.lexeme))
+		pos += t.len
+	}
+	buf[pos] = '\x00'
+	return string(buf)
+}
+
+// Concatenates all tokens in `arg` and returns a new string token.
+// This function is used for the stringizing operator (#).
+func stringize(hash *Token, arg *Token) *Token {
+	// Create a new string token. We need to set some value to its
+	// source location for error reporting function, so we use a macro
+	// name token as a template.
+	s := joinTokens(arg)
+	return newStrToken(s, hash)
+}
+
 // Replace func-like macro parameters with given arguments.
 func subst(tok *Token, args *MacroArg) *Token {
 	head := Token{}
 	cur := &head
 
 	for tok.kind != TK_EOF {
-		arg := findArg(args, tok)
+		// "#" followed by a parameter is replaced with stringized actuals.
+		if tok.equal("#") {
+			arg := findArg(args, tok.next)
+			if arg == nil {
+				failTok(tok.next, "'#' is not followed by a macro parameter")
+			}
+			cur.next = stringize(tok, arg.tok)
+			cur = cur.next
+			tok = tok.next.next
+			continue
+		}
 
 		// Handle a macro token. Macro arguments are completely macro-expanded
 		// before they are substituted into a macro body.
+		arg := findArg(args, tok)
 		if arg != nil {
 			t := preprocess2(arg.tok)
 			for ; t.kind != TK_EOF; t = t.next {
