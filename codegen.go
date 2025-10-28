@@ -207,6 +207,7 @@ type Arch interface {
 	runLinker(inputs []string, output string)
 	addDefaultIncludePaths(argv0 string)
 	initMacro()
+	assignLVarOffsets(prog *Obj)
 }
 
 type X64 struct{}
@@ -953,6 +954,10 @@ func (a X64) emitText(prog *Obj) {
 		// Save passed-by-register arguments to the stack
 		gp, fp := 0, 0
 		for vara := fn.params; vara != nil; vara = vara.next {
+			if vara.offset > 0 {
+				continue
+			}
+
 			if vara.ty.isFlonum() {
 				a.storeFP(fp, vara.offset, vara.ty.size)
 				fp++
@@ -1743,6 +1748,10 @@ func (a RiscV) emitText(prog *Obj) {
 		// Save passed-by-register arguments to the stack
 		gp, fp := 0, 0
 		for vara := fn.params; vara != nil; vara = vara.next {
+			if vara.offset > 0 {
+				continue
+			}
+
 			if vara.ty.isFlonum() {
 				if fp < FP_MAX_R {
 					a.storeFP(fp, vara.offset, vara.ty.size)
@@ -1838,7 +1847,7 @@ func codegen(target Arch, prog *Obj, out *os.File) {
 		println("  .file %d \"%s\"", files[i].fileno, files[i].name)
 	}
 
-	assignLVarOffsets(prog)
+	target.assignLVarOffsets(prog)
 
 	target.emitData(prog)
 	target.emitText(prog)
@@ -1851,18 +1860,102 @@ func alignTo(n, align int) int {
 }
 
 // Assign offsets to local variables.
-func assignLVarOffsets(prog *Obj) {
+func (a X64) assignLVarOffsets(prog *Obj) {
 	for fn := prog; fn != nil; fn = fn.next {
 		if !fn.isFunction {
 			continue
 		}
-		offset := 0
-		for vara := fn.locals; vara != nil; vara = vara.next {
-			offset += vara.ty.size
-			offset = alignTo(offset, vara.align)
-			vara.offset = -offset
+
+		// If a function has many parameters, some parameters are
+		// inevitably passed by stack rather than by register.
+		// The first passed-by-stack parameter resides at RBP+16.
+		top := 16
+		bottom := 0
+
+		gp, fp := 0, 0
+
+		// Assign offsets to pass-by-stack parameters.
+		for vara := fn.params; vara != nil; vara = vara.next {
+			if vara.ty.isFlonum() {
+				if fp < FP_MAX_X {
+					fp++
+					continue
+				}
+			} else {
+				if gp < GP_MAX_X {
+					gp++
+					continue
+				}
+			}
+
+			top = alignTo(top, 8)
+			vara.offset = top
+			top += vara.ty.size
 		}
-		fn.stackSize = alignTo(offset, 16)
+
+		// Assign offsets to pass-by-register parameters and local variables.
+		for vara := fn.locals; vara != nil; vara = vara.next {
+			if vara.offset != 0 {
+				continue
+			}
+
+			bottom += vara.ty.size
+			bottom = alignTo(bottom, vara.align)
+			vara.offset = -bottom
+		}
+
+		fn.stackSize = alignTo(bottom, 16)
+	}
+}
+
+func (a RiscV) assignLVarOffsets(prog *Obj) {
+	for fn := prog; fn != nil; fn = fn.next {
+		if !fn.isFunction {
+			continue
+		}
+
+		// If a function has many parameters, some parameters are
+		// inevitably passed by stack rather than by register.
+		// The first passed-by-stack parameter resides at RBP+16.
+		top := 16
+		bottom := 0
+
+		gp, fp := 0, 0
+
+		// Assign offsets to pass-by-stack parameters.
+		for vara := fn.params; vara != nil; vara = vara.next {
+			if vara.ty.isFlonum() {
+				if fp < FP_MAX_R {
+					fp++
+					continue
+				} else if gp < GP_MAX_R {
+					gp++
+					continue
+				}
+			} else {
+				if gp < GP_MAX_R {
+					gp++
+					continue
+				}
+			}
+
+			top = alignTo(top, 8)
+			vara.offset = top
+			top += vara.ty.size
+		}
+
+		// Assign offsets to pass-by-register parameters and local variables.
+		for vara := fn.locals; vara != nil; vara = vara.next {
+			if vara.offset != 0 {
+				continue
+			}
+
+			bottom += vara.ty.size
+			bottom = alignTo(bottom, vara.align)
+			vara.offset = -bottom
+		}
+
+		fn.stackSize = alignTo(bottom, 16)
 	}
 }
 
