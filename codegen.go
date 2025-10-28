@@ -129,6 +129,19 @@ func (a X64) genExpr(node *Node) {
 
 func (a X64) genStmt(node *Node) {
 	switch node.kind {
+	case ND_IF:
+		c := count()
+		a.genExpr(node.cond)
+		fmt.Printf("  cmp $0, %%rax\n")
+		fmt.Printf("  je  .L.else.%d\n", c)
+		a.genStmt(node.then)
+		fmt.Printf("  jmp .L.end.%d\n", c)
+		fmt.Printf(".L.else.%d:\n", c)
+		if node.els != nil {
+			a.genStmt(node.els)
+		}
+		fmt.Printf(".L.end.%d:\n", c)
+		return
 	case ND_BLOCK:
 		for n := node.body; n != nil; n = n.next {
 			a.genStmt(n)
@@ -255,6 +268,18 @@ func (a RiscV) genExpr(node *Node) {
 
 func (a RiscV) genStmt(node *Node) {
 	switch node.kind {
+	case ND_IF:
+		c := count()
+		a.genExpr(node.cond)
+		fmt.Printf("  beqz a0, .L.else.%d\n", c)
+		a.genStmt(node.then)
+		fmt.Printf("  j .L.end.%d\n", c)
+		fmt.Printf(".L.else.%d:\n", c)
+		if node.els != nil {
+			a.genStmt(node.els)
+		}
+		fmt.Printf(".L.end.%d:\n", c)
+		return
 	case ND_BLOCK:
 		for n := node.body; n != nil; n = n.next {
 			a.genStmt(n)
@@ -298,4 +323,12 @@ func assignLVarOffsets(prog *Function) {
 		vara.offset = -offset
 	}
 	prog.stackSize = alignTo(offset, 16)
+}
+
+var I = 1
+
+func count() int {
+	t := I
+	I++
+	return t
 }

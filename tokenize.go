@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"unicode"
@@ -10,6 +11,8 @@ import (
 
 var source string
 var currentInputLoc int
+
+var kws = []string{"return", "if", "else"}
 
 // Token
 type TokenKind int
@@ -79,9 +82,13 @@ func readPunct(p int) int {
 	}
 }
 
+func isKeyword(tok *Token) bool {
+	return slices.ContainsFunc(kws, tok.equal)
+}
+
 func convertKeywords(tok *Token) {
 	for t := tok; t.kind != TK_EOF; t = t.next {
-		if t.equal("return") {
+		if isKeyword(t) {
 			t.kind = TK_KEYWORD
 		}
 	}

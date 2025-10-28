@@ -33,6 +33,7 @@ const (
 	ND_LE                        // <=
 	ND_ASSIGN                    // =
 	ND_RETURN                    // "return"
+	ND_IF                        // "if"
 	ND_BLOCK                     // { ... }
 	ND_EXPR_STMT                 // Expression statement
 	ND_VAR                       // Variable
@@ -45,6 +46,11 @@ type Node struct {
 	next *Node    // Next node
 	lhs  *Node    // Left-hand side
 	rhs  *Node    // Right-hand side
+
+	// "if" statement
+	cond *Node
+	then *Node
+	els  *Node
 
 	// Block
 	body *Node
@@ -104,12 +110,26 @@ func NewLVar(name string) *Obj {
 }
 
 // stmt = "return" expr ";"
+// | "if" "(" expr ")" stmt ("else" stmt)?
 // | "{" compound-stmt
 // | expr-stmt
 func stmt(rest **Token, tok *Token) *Node {
 	if tok.equal("return") {
 		node := NewUnary(ND_RETURN, expr(&tok, tok.next))
 		*rest = tok.skip(";")
+		return node
+	}
+
+	if tok.equal("if") {
+		node := NewNode(ND_IF)
+		tok = tok.next.skip("(")
+		node.cond = expr(&tok, tok)
+		tok = tok.skip(")")
+		node.then = stmt(&tok, tok)
+		if tok.equal("else") {
+			node.els = stmt(&tok, tok.next)
+		}
+		*rest = tok
 		return node
 	}
 
