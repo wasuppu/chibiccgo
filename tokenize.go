@@ -262,12 +262,11 @@ func readCharLiteral(start, quote int) *Token {
 		failAt(start, "unclosed char literal")
 	}
 
-	var c byte
+	var c int
 	if source[p] == '\\' {
-		c = readEscapedChar(&p, p+1)
+		c = int(int8(readEscapedChar(&p, p+1)))
 	} else {
-		c = source[p]
-		p++
+		c = int(decodeUtf8(&p, p))
 	}
 
 	end := strings.Index(source[p:], "'")
@@ -276,7 +275,7 @@ func readCharLiteral(start, quote int) *Token {
 	}
 
 	tok := NewToken(TK_NUM, start, p+end-start+1, source[start:p+end+1])
-	tok.val = int64(int8(c))
+	tok.val = int64(c)
 	tok.ty = tyInt
 	return tok
 }
@@ -539,6 +538,7 @@ func tokenize(file *File) *Token {
 		// Character literal
 		if input[p] == '\'' {
 			cur.next = readCharLiteral(p, p)
+			cur.val = int64(int8(cur.val))
 			cur = cur.next
 			p += cur.len
 			continue
