@@ -33,6 +33,7 @@ var optS bool
 var optC bool
 var optCC1 bool
 var optHashHashHash bool
+var optStatic bool
 var optMF string
 var optMT string
 var optO string
@@ -352,6 +353,12 @@ func parseArgs(args []string) {
 		if args[i] == "-idirafter" {
 			idirafter = append(idirafter, args[i])
 			i++
+			continue
+		}
+
+		if args[i] == "-static" {
+			optStatic = true
+			ldExtraArgs = append(ldExtraArgs, "-static")
 			continue
 		}
 
@@ -744,8 +751,6 @@ func (a X64) runLinker(inputs []string, output string) {
 	arr = append(arr, output)
 	arr = append(arr, "-m")
 	arr = append(arr, "elf_x86_64")
-	arr = append(arr, "-dynamic-linker")
-	arr = append(arr, "/lib64/ld-linux-x86-64.so.2")
 
 	libpath := a.findLibPath()
 	gccLibpath := a.findGCCLibPath()
@@ -754,8 +759,7 @@ func (a X64) runLinker(inputs []string, output string) {
 	arr = append(arr, fmt.Sprintf("%s/crti.o", libpath))
 	arr = append(arr, fmt.Sprintf("%s/crtbegin.o", gccLibpath))
 	arr = append(arr, fmt.Sprintf("-L%s", gccLibpath))
-	arr = append(arr, fmt.Sprintf("-L%s", libpath))
-	arr = append(arr, fmt.Sprintf("-L%s/..", libpath))
+	arr = append(arr, "-L/usr/lib/x86_64-linux-gnu")
 	arr = append(arr, "-L/usr/lib64")
 	arr = append(arr, "-L/lib64")
 	arr = append(arr, "-L/usr/lib/x86_64-linux-gnu")
@@ -764,17 +768,31 @@ func (a X64) runLinker(inputs []string, output string) {
 	arr = append(arr, "-L/usr/lib")
 	arr = append(arr, "-L/lib")
 
+	if !optStatic {
+		arr = append(arr, "-dynamic-linker")
+		arr = append(arr, "/lib64/ld-linux-x86-64.so.2")
+	}
+
 	for i := 0; i < len(ldExtraArgs); i++ {
 		arr = append(arr, ldExtraArgs[i])
 	}
 
 	arr = append(arr, inputs...)
 
-	arr = append(arr, "-lc")
-	arr = append(arr, "-lgcc")
-	arr = append(arr, "--as-needed")
-	arr = append(arr, "-lgcc_s")
-	arr = append(arr, "--no-as-needed")
+	if optStatic {
+		arr = append(arr, "--start-group")
+		arr = append(arr, "-lgcc")
+		arr = append(arr, "-lgcc_eh")
+		arr = append(arr, "-lc")
+		arr = append(arr, "--end-group")
+	} else {
+		arr = append(arr, "-lc")
+		arr = append(arr, "-lgcc")
+		arr = append(arr, "--as-needed")
+		arr = append(arr, "-lgcc_s")
+		arr = append(arr, "--no-as-needed")
+	}
+
 	arr = append(arr, fmt.Sprintf("%s/crtend.o", gccLibpath))
 	arr = append(arr, fmt.Sprintf("%s/crtn.o", libpath))
 
