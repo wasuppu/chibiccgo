@@ -430,9 +430,19 @@ func funcParams(rest **Token, tok *Token, ty *Type) *Type {
 		if cur != &head {
 			tok = tok.skip(",")
 		}
-		basety := declspec(&tok, tok, nil)
-		ty := declarator(&tok, tok, basety)
-		cur.next = copyType(ty)
+
+		ty2 := declspec(&tok, tok, nil)
+		ty2 = declarator(&tok, tok, ty2)
+
+		// "array of T" is converted to "pointer to T" only in the parameter
+		// context. For example, *argv[] is converted to **argv by this.
+		if ty2.kind == TY_ARRAY {
+			name := ty2.name
+			ty2 = pointerTo(ty2.base)
+			ty2.name = name
+		}
+
+		cur.next = copyType(ty2)
 		cur = cur.next
 	}
 
