@@ -77,6 +77,9 @@ type Obj struct {
 	// Local variable
 	offset int
 
+	// struct type for riscv
+	isHalfByStack bool
+
 	// Global variable or function
 	isFunction   bool
 	isDefinition bool

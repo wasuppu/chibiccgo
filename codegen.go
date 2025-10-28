@@ -334,8 +334,13 @@ func (a X64) storeGP(r, offset, sz int) {
 	case 8:
 		println("  mov %s, %d(%%rbp)", argReg64x[r], offset)
 		return
+	default:
+		for i := range sz {
+			println("  mov %s, %d(%%rbp)", argReg8x[r], offset+i)
+			println("  shr $8, %s", argReg64x[r])
+		}
+		return
 	}
-	unreachable()
 }
 
 func (a X64) storeFP(r, offset, sz int) {
@@ -1086,11 +1091,33 @@ func (a X64) emitText(prog *Obj) {
 				continue
 			}
 
-			if vara.ty.isFlonum() {
-				a.storeFP(fp, vara.offset, vara.ty.size)
+			ty := vara.ty
+
+			switch ty.kind {
+			case TY_STRUCT, TY_UNION:
+				assert(ty.size <= 16)
+				if hasFlonum(ty, 0, 8, 0) {
+					a.storeFP(fp, vara.offset, min(8, ty.size))
+					fp++
+				} else {
+					a.storeGP(gp, vara.offset, min(8, ty.size))
+					gp++
+				}
+
+				if ty.size > 8 {
+					if hasFlonum(ty, 8, 16, 0) {
+						a.storeFP(fp, vara.offset+8, ty.size-8)
+						fp++
+					} else {
+						a.storeGP(gp, vara.offset+8, ty.size-8)
+						gp++
+					}
+				}
+			case TY_FLOAT, TY_DOUBLE:
+				a.storeFP(fp, vara.offset, ty.size)
 				fp++
-			} else {
-				a.storeGP(gp, vara.offset, vara.ty.size)
+			default:
+				a.storeGP(gp, vara.offset, ty.size)
 				gp++
 			}
 		}
@@ -2040,6 +2067,16 @@ func (a RiscV) genStmt(node *Node) {
 	failTok(node.tok, "invalid statement")
 }
 
+func storeStruct(reg, offset, size int) {
+	for i := range size {
+		println("  lb t0, %d(a%d)", I, reg)
+
+		println("  li t1, %d", offset+i)
+		println("  add t1, fp, t1")
+		println("  sb t0, 0(t1)")
+	}
+}
+
 func (a RiscV) emitText(prog *Obj) {
 	for fn := prog; fn != nil; fn = fn.next {
 		if !fn.isFunction || !fn.isDefinition {
@@ -2053,11 +2090,67 @@ func (a RiscV) emitText(prog *Obj) {
 		// Save passed-by-register arguments to the stack
 		gp, fp := 0, 0
 		for vara := fn.params; vara != nil; vara = vara.next {
-			if vara.offset > 0 {
+			if vara.offset > 0 && !vara.isHalfByStack {
 				continue
 			}
 
-			if vara.ty.isFlonum() {
+			ty := vara.ty
+
+			switch ty.kind {
+			case TY_STRUCT, TY_UNION:
+				if ty.fsReg1Ty.isFlonum() || ty.fsReg2Ty.isFlonum() {
+					sz1 := vara.ty.fsReg1Ty.size
+					if ty.fsReg1Ty.isFlonum() {
+						a.storeFP(fp, vara.offset, sz1)
+						fp++
+					} else {
+						a.storeGP(gp, vara.offset, sz1)
+						gp++
+					}
+
+					if ty.fsReg2Ty.kind != TY_VOID {
+						sz2 := ty.fsReg2Ty.size
+						off := max(sz1, sz2)
+
+						if ty.fsReg2Ty.isFlonum() {
+							a.storeFP(fp, vara.offset+off, sz2)
+							fp++
+						} else {
+							a.storeGP(gp, vara.offset+off, sz2)
+							gp++
+						}
+					}
+					break
+				}
+
+				if ty.size > 16 {
+					storeStruct(gp, vara.offset, ty.size)
+					gp++
+					break
+				}
+
+				if vara.isHalfByStack {
+					storeStruct(gp, vara.offset, 8)
+					gp++
+					for i := range vara.ty.size - 8 {
+						println("  lb t0, %d(fp)", 16+i)
+
+						println("  li t1, %d", vara.offset+8+i)
+						println("  add t1, fp, t1")
+						println("  sb t0, 0(t1)")
+					}
+					break
+				}
+
+				if ty.size <= 16 {
+					a.storeGP(gp, vara.offset, min(8, ty.size))
+					gp++
+				}
+				if ty.size > 8 {
+					a.storeGP(gp, vara.offset+8, ty.size-8)
+					gp++
+				}
+			case TY_FLOAT, TY_DOUBLE:
 				if fp < FP_MAX_R {
 					a.storeFP(fp, vara.offset, vara.ty.size)
 					fp++
@@ -2065,7 +2158,7 @@ func (a RiscV) emitText(prog *Obj) {
 					a.storeGP(gp, vara.offset, vara.ty.size)
 					gp++
 				}
-			} else {
+			default:
 				a.storeGP(gp, vara.offset, vara.ty.size)
 				gp++
 			}
@@ -2181,12 +2274,37 @@ func (a X64) assignLVarOffsets(prog *Obj) {
 
 		// Assign offsets to pass-by-stack parameters.
 		for vara := fn.params; vara != nil; vara = vara.next {
-			if vara.ty.isFlonum() {
+			ty := vara.ty
+
+			switch ty.kind {
+			case TY_STRUCT, TY_UNION:
+				if ty.size <= 16 {
+					fp1b := hasFlonum(ty, 0, 8, 0)
+					fp2b := hasFlonum(ty, 8, 16, 8)
+
+					var fp1, fp2, nfp1, nfp2 int
+					if fp1b {
+						fp1 = 1
+					} else {
+						nfp1 = 1
+					}
+					if fp2b {
+						fp2 = 1
+					} else {
+						nfp2 = 1
+					}
+					if fp+fp1+fp2 < FP_MAX_X && gp+nfp1+nfp2 < GP_MAX_X {
+						fp = fp + fp1 + fp2
+						gp = gp + nfp1 + nfp2
+						continue
+					}
+				}
+			case TY_FLOAT, TY_DOUBLE:
 				if fp < FP_MAX_X {
 					fp++
 					continue
 				}
-			} else {
+			default:
 				if gp < GP_MAX_X {
 					gp++
 					continue
@@ -2229,7 +2347,39 @@ func (a RiscV) assignLVarOffsets(prog *Obj) {
 
 		// Assign offsets to pass-by-stack parameters.
 		for vara := fn.params; vara != nil; vara = vara.next {
-			if vara.ty.isFlonum() {
+			ty := vara.ty
+
+			switch ty.kind {
+			case TY_STRUCT, TY_UNION:
+				setFloStMemsTy(&ty, gp, fp)
+
+				if ty.fsReg1Ty.isFlonum() || ty.fsReg2Ty.isFlonum() {
+					regs := []*Type{ty.fsReg1Ty, ty.fsReg2Ty}
+					for i := range 2 {
+						if regs[i].isFlonum() {
+							fp++
+						}
+						if regs[i].isInteger() {
+							gp++
+						}
+						continue
+					}
+				}
+
+				if 8 < ty.size && ty.size <= 16 {
+					if gp == GP_MAX_R-1 {
+						vara.isHalfByStack = true
+					}
+					if gp < GP_MAX_R {
+						gp++
+					}
+				}
+
+				if gp < GP_MAX_R {
+					gp++
+					continue
+				}
+			case TY_FLOAT, TY_DOUBLE:
 				if fp < FP_MAX_R {
 					fp++
 					continue
@@ -2237,7 +2387,7 @@ func (a RiscV) assignLVarOffsets(prog *Obj) {
 					gp++
 					continue
 				}
-			} else {
+			default:
 				if gp < GP_MAX_R {
 					gp++
 					continue
@@ -2246,12 +2396,16 @@ func (a RiscV) assignLVarOffsets(prog *Obj) {
 
 			top = alignTo(top, 8)
 			vara.offset = top
-			top += vara.ty.size
+			if vara.isHalfByStack {
+				top += vara.ty.size - 8
+			} else {
+				top += vara.ty.size
+			}
 		}
 
 		// Assign offsets to pass-by-register parameters and local variables.
 		for vara := fn.locals; vara != nil; vara = vara.next {
-			if vara.offset != 0 {
+			if vara.offset != 0 && !vara.isHalfByStack {
 				continue
 			}
 
