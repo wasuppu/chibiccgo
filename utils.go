@@ -53,7 +53,7 @@ func vfailAt(filename, input string, lineno, loc int, format string, args ...any
 	fmt.Fprintf(os.Stderr, "%.*s\n", end-line, input[line:])
 
 	// Show the error message.
-	pos := loc - line + indent
+	pos := displayWidth(line, loc-line) + indent
 
 	fmt.Fprintf(os.Stderr, "%*s", pos, "") // print pos spaces
 	fmt.Fprint(os.Stderr, "^ ")
@@ -68,16 +68,19 @@ func failAt(loc int, format string, args ...any) {
 			lineno++
 		}
 	}
+	source = currentFile.contents
 	vfailAt(currentFile.name, currentFile.contents, lineno, loc, format, args...)
 	os.Exit(1)
 }
 
 func failTok(tok *Token, format string, args ...any) {
+	source = tok.file.contents
 	vfailAt(tok.file.name, tok.file.contents, tok.lineno, tok.loc, format, args...)
 	os.Exit(1)
 }
 
 func warnTok(tok *Token, format string, args ...any) {
+	source = tok.file.contents
 	vfailAt(tok.file.name, tok.file.contents, tok.lineno, tok.loc, format, args...)
 }
 
