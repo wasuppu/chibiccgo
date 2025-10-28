@@ -515,7 +515,14 @@ func emitData(prog *Obj) {
 		fmt.Printf("  .data\n")
 		fmt.Printf("  .globl %s\n", vara.name)
 		fmt.Printf("%s:\n", vara.name)
-		fmt.Printf("  .zero %d\n", vara.ty.size)
+
+		if len(vara.initData) > 0 {
+			for i := 0; i < vara.ty.size; i++ {
+				fmt.Printf("  .byte %d\n", vara.initData[i])
+			}
+		} else {
+			fmt.Printf("  .zero %d\n", vara.ty.size)
+		}
 	}
 }
 

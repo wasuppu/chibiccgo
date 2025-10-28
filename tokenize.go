@@ -21,6 +21,7 @@ const (
 	TK_IDENT   TokenKind = iota // Identifiers
 	TK_PUNCT                    // Punctuators
 	TK_KEYWORD                  // Keywords
+	TK_STR                      // String literals
 	TK_NUM                      // Numeric literals
 	TK_EOF                      // End-of-file markers
 )
@@ -33,6 +34,8 @@ type Token struct {
 	loc    int       // Token location
 	len    int       // Token length
 	lexeme string    // Token lexeme value in string
+	ty     *Type     // Used if TK_STR
+	str    string    // String literal contents including terminating '\0'
 }
 
 // Create a new token.
@@ -95,6 +98,21 @@ func isKeyword(tok *Token) bool {
 	return slices.ContainsFunc(kws, tok.equal)
 }
 
+func readStringLiteral(start int) *Token {
+	p := start + 1
+	sourceLen := len(source)
+	for ; source[p] != '"'; p++ {
+		if source[p] == '\n' || p == sourceLen {
+			failAt(start, "unclosed string literal")
+		}
+	}
+
+	tok := NewToken(TK_STR, start, p+1-start, source[start:p+1])
+	tok.ty = arrayOf(tyChar, p-start)
+	tok.str = fmt.Sprintf("%s\x00", source[start+1:p])
+	return tok
+}
+
 func convertKeywords(tok *Token) {
 	for t := tok; t.kind != TK_EOF; t = t.next {
 		if isKeyword(t) {
@@ -124,6 +142,14 @@ func tokenize(input string) *Token {
 			cur = cur.next
 			cur.val = n
 			p = np
+			continue
+		}
+
+		// String literal
+		if input[p] == '"' {
+			cur.next = readStringLiteral(p)
+			cur = cur.next
+			p += cur.len
 			continue
 		}
 

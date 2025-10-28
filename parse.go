@@ -1,5 +1,7 @@
 package main
 
+import "fmt"
+
 // All local variable instances created during parsing are
 // accumulated to this list.
 var locals *Obj
@@ -19,6 +21,9 @@ type Obj struct {
 
 	// Global variable or function
 	isFunction bool
+
+	// Global variable
+	initData string
 
 	// Function
 	params    *Obj
@@ -154,6 +159,24 @@ func NewGVar(name string, ty *Type) *Obj {
 	vara := NewVar(name, ty)
 	vara.next = globals
 	globals = vara
+	return vara
+}
+
+var id = 0
+
+func newUniqueName() string {
+	buf := fmt.Sprintf(".L..%d", id)
+	id++
+	return buf
+}
+
+func newAnonGVar(ty *Type) *Obj {
+	return NewGVar(newUniqueName(), ty)
+}
+
+func newStringLiteral(p string, ty *Type) *Obj {
+	vara := newAnonGVar(ty)
+	vara.initData = p
 	return vara
 }
 
@@ -610,7 +633,7 @@ func funcall(rest **Token, tok *Token) *Node {
 	return node
 }
 
-// primary = "(" expr ")" | "sizeof" unary | ident func-args? | num
+// primary = "(" expr ")" | "sizeof" unary | ident func-args? | str | num
 func primary(rest **Token, tok *Token) *Node {
 	if tok.equal("(") {
 		node := expr(&tok, tok.next)
@@ -635,6 +658,12 @@ func primary(rest **Token, tok *Token) *Node {
 		if vara == nil {
 			failTok(tok, "undefined variable")
 		}
+		*rest = tok.next
+		return NewVarNode(vara, tok)
+	}
+
+	if tok.kind == TK_STR {
+		vara := newStringLiteral(tok.str, tok.ty)
 		*rest = tok.next
 		return NewVarNode(vara, tok)
 	}
