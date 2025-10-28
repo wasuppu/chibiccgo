@@ -758,6 +758,16 @@ func declaration(rest **Token, tok *Token, basety *Type, attr *VarAttr) *Node {
 			failTok(tok, "variable declared void")
 		}
 
+		if attr != nil && attr.isStatic {
+			// static local variable
+			vara := newAnonGVar(ty)
+			pushScope(getIdent(ty.name)).vara = vara
+			if tok.equal("=") {
+				gvarInitializer(&tok, tok.next, vara)
+			}
+			continue
+		}
+
 		vara := NewLVar(getIdent(ty.name), ty)
 		if attr != nil && attr.align != 0 {
 			vara.align = attr.align
