@@ -230,12 +230,12 @@ func stringLiteralEnd(p int) int {
 	return p
 }
 
-func readStringLiteral(start int) *Token {
-	end := stringLiteralEnd(start + 1)
-	buf := make([]byte, end-start)
+func readStringLiteral(start, quote int) *Token {
+	end := stringLiteralEnd(quote + 1)
+	buf := make([]byte, end-quote)
 	len := 0
 
-	for p := start + 1; p < end; {
+	for p := quote + 1; p < end; {
 		if source[p] == '\\' {
 			buf[len] = readEscapedChar(&p, p+1)
 			len++
@@ -529,7 +529,15 @@ func tokenize(file *File) *Token {
 
 		// String literal
 		if input[p] == '"' {
-			cur.next = readStringLiteral(p)
+			cur.next = readStringLiteral(p, p)
+			cur = cur.next
+			p += cur.len
+			continue
+		}
+
+		// UTF-8 string literal
+		if strings.HasPrefix(input[p:], "u8\"") {
+			cur.next = readStringLiteral(p, p+2)
 			cur = cur.next
 			p += cur.len
 			continue
