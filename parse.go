@@ -1162,7 +1162,7 @@ func isTypename(tok *Token) bool {
 	return findTypedef(tok) != nil
 }
 
-// stmt = "return" expr ";"
+// stmt = "return" expr? ";"
 // | "if" "(" expr ")" stmt ("else" stmt)?
 // | "switch" "(" expr ")" stmt
 // | "case" const-expr ":" stmt
@@ -1178,6 +1178,10 @@ func isTypename(tok *Token) bool {
 func stmt(rest **Token, tok *Token) *Node {
 	if tok.equal("return") {
 		node := NewNode(ND_RETURN, tok)
+		if consume(rest, tok.next, ";") {
+			return node
+		}
+
 		exp := expr(&tok, tok.next)
 		*rest = tok.skip(";")
 

@@ -495,7 +495,9 @@ func (a X64) genStmt(node *Node) {
 		a.genStmt(node.lhs)
 		return
 	case ND_RETURN:
-		a.genExpr(node.lhs)
+		if node.lhs != nil {
+			a.genExpr(node.lhs)
+		}
 		println("  jmp .L.return.%s", currentGenFn.name)
 		return
 	case ND_EXPR_STMT:
@@ -957,7 +959,9 @@ func (a RiscV) genStmt(node *Node) {
 		a.genStmt(node.lhs)
 		return
 	case ND_RETURN:
-		a.genExpr(node.lhs)
+		if node.lhs != nil {
+			a.genExpr(node.lhs)
+		}
 		println("  j .L.return.%s", currentGenFn.name)
 		return
 	case ND_EXPR_STMT:
