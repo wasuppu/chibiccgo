@@ -85,6 +85,10 @@ func enumType() *Type {
 	return newType(TY_ENUM, 4, 4)
 }
 
+func structType() *Type {
+	return newType(TY_STRUCT, 0, 1)
+}
+
 func getCommonType(ty1, ty2 *Type) *Type {
 	if ty1.base != nil {
 		return pointerTo(ty1.base)

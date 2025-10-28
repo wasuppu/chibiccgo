@@ -1151,22 +1151,35 @@ func structUnionDecl(rest **Token, tok *Token) *Type {
 	}
 
 	if tag != nil && !tok.equal("{") {
-		ty := findTag(tag)
-		if ty == nil {
-			failTok(tag, "unknown struct type")
-		}
 		*rest = tok
+
+		ty := findTag(tag)
+		if ty != nil {
+			return ty
+		}
+
+		ty = structType()
+		ty.size = -1
+		pushTagScope(tag, ty)
 		return ty
 	}
 
-	// Construct a struct object.
-	ty := &Type{}
-	ty.kind = TY_STRUCT
-	structMembers(rest, tok.next, ty)
-	ty.align = 1
+	tok = tok.skip("{")
 
-	// Register the struct type if a name was given.
+	// Construct a struct object.
+	ty := structType()
+	structMembers(rest, tok, ty)
+
 	if tag != nil {
+		// If this is a redefinition, overwrite a previous type.
+		// Otherwise, register the struct type.
+		for sc := scope.tags; sc != nil; sc = sc.next {
+			if tag.equal(sc.name) {
+				*sc.ty = *ty
+				return sc.ty
+			}
+		}
+
 		pushTagScope(tag, ty)
 	}
 
@@ -1177,6 +1190,10 @@ func structUnionDecl(rest **Token, tok *Token) *Type {
 func structDecl(rest **Token, tok *Token) *Type {
 	ty := structUnionDecl(rest, tok)
 	ty.kind = TY_STRUCT
+
+	if ty.size < 0 {
+		return ty
+	}
 
 	// Assign offsets within the struct to members.
 	offset := 0
@@ -1197,6 +1214,10 @@ func structDecl(rest **Token, tok *Token) *Type {
 func unionDecl(rest **Token, tok *Token) *Type {
 	ty := structUnionDecl(rest, tok)
 	ty.kind = TY_UNION
+
+	if ty.size < 0 {
+		return ty
+	}
 
 	// If union, we don't have to assign offsets because they
 	// are already initialized to zero. We need to compute the
