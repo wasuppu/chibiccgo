@@ -61,18 +61,19 @@ const (
 
 // Token type
 type Token struct {
-	kind   TokenKind // Token kind
-	next   *Token    // Next token
-	val    int64     // If kind is TK_NUM, its value
-	fval   float64   // If kind is TK_NUM, its value
-	loc    int       // Token location
-	len    int       // Token length
-	lexeme string    // Token lexeme value in string
-	ty     *Type     // Used if TK_NUM or TK_STR
-	str    string    // String literal contents including terminating '\0'
-	file   *File     // Source location
-	lineno int       // Line number
-	atBol  bool      // True if this token is at beginning of line
+	kind    TokenKind // Token kind
+	next    *Token    // Next token
+	val     int64     // If kind is TK_NUM, its value
+	fval    float64   // If kind is TK_NUM, its value
+	loc     int       // Token location
+	len     int       // Token length
+	lexeme  string    // Token lexeme value in string
+	ty      *Type     // Used if TK_NUM or TK_STR
+	str     string    // String literal contents including terminating '\0'
+	file    *File     // Source location
+	lineno  int       // Line number
+	atBol   bool      // True if this token is at beginning of line
+	hideset *Hideset  // For macro expansion
 }
 
 // Create a new token.

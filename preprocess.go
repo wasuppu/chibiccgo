@@ -8,6 +8,11 @@ import (
 var condIncl *CondIncl
 var macros *Macro
 
+type Hideset struct {
+	next *Hideset
+	name string
+}
+
 type Macro struct {
 	next    *Macro
 	name    string
@@ -60,6 +65,47 @@ func newEof(tok *Token) *Token {
 	t.kind = TK_EOF
 	t.len = 0
 	return t
+}
+
+func newHideset(name string) *Hideset {
+	return &Hideset{
+		name: name,
+	}
+}
+
+func hidesetUnion(hs1, hs2 *Hideset) *Hideset {
+	head := Hideset{}
+	cur := &head
+
+	for ; hs1 != nil; hs1 = hs1.next {
+		cur.next = newHideset(hs1.name)
+		cur = cur.next
+	}
+	cur.next = hs2
+	return head.next
+}
+
+func hidesetContains(hs *Hideset, s string, l int) bool {
+	for ; hs != nil; hs = hs.next {
+		if len(hs.name) == l && hs.name[:l] == s[:l] {
+			return true
+		}
+	}
+	return false
+}
+
+func addHideset(tok *Token, hs *Hideset) *Token {
+	head := Token{}
+	cur := &head
+
+	for ; tok != nil; tok = tok.next {
+		t := copyToken(tok)
+		t.hideset = hidesetUnion(t.hideset, hs)
+		cur.next = t
+		cur = cur.next
+	}
+
+	return head.next
 }
 
 // Append tok2 to the end of tok1.
@@ -186,11 +232,18 @@ func addMacro(name string, body *Token) *Macro {
 // If tok is a macro, expand it and return true.
 // Otherwise, do nothing and return false.
 func expandMacro(rest **Token, tok *Token) bool {
+	if hidesetContains(tok.hideset, tok.lexeme, tok.len) {
+		return false
+	}
+
 	m := findMacro(tok)
 	if m == nil {
 		return false
 	}
-	*rest = m.body.append(tok.next)
+
+	hs := hidesetUnion(tok.hideset, newHideset(m.name))
+	body := addHideset(m.body, hs)
+	*rest = body.append(tok.next)
 	return true
 }
 
