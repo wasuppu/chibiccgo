@@ -108,10 +108,20 @@ type VarScope struct {
 	vara *Obj
 }
 
+// Scope for struct tags
+type TagScope struct {
+	next *TagScope
+	name string
+	ty   *Type
+}
+
 // Represents a block scope.
 type Scope struct {
 	next *Scope
+	// C has two block scopes; one is for variables and the other is
+	// for struct tags.
 	vars *VarScope
+	tags *TagScope
 }
 
 func enterScope() {
@@ -129,12 +139,32 @@ func pushScope(name string, vara *Obj) *VarScope {
 	return sc
 }
 
+func pushTagScope(tok *Token, ty *Type) {
+	sc := &TagScope{
+		name: tok.lexeme,
+		ty:   ty,
+		next: scope.tags,
+	}
+	scope.tags = sc
+}
+
 // Find a variable by name.
 func findVar(tok *Token) *Obj {
 	for sc := scope; sc != nil; sc = sc.next {
 		for sc2 := sc.vars; sc2 != nil; sc2 = sc2.next {
 			if tok.equal(sc2.name) {
 				return sc2.vara
+			}
+		}
+	}
+	return nil
+}
+
+func findTag(tok *Token) *Type {
+	for sc := scope; sc != nil; sc = sc.next {
+		for sc2 := sc.tags; sc2 != nil; sc2 = sc2.next {
+			if tok.equal(sc2.name) {
+				return sc2.ty
 			}
 		}
 	}
@@ -683,12 +713,26 @@ func structMembers(rest **Token, tok *Token, ty *Type) {
 
 // struct-decl = "{" struct-members
 func structDecl(rest **Token, tok *Token) *Type {
-	tok = tok.skip("{")
+	// Read a struct tag.
+	tag := &Token{}
+	if tok.kind == TK_IDENT {
+		tag = tok
+		tok = tok.next
+	}
+
+	if tag != nil && !tok.equal("{") {
+		ty := findTag(tag)
+		if ty == nil {
+			failTok(tag, "unknown struct type")
+		}
+		*rest = tok
+		return ty
+	}
 
 	// Construct a struct object.
 	ty := &Type{}
 	ty.kind = TY_STRUCT
-	structMembers(rest, tok, ty)
+	structMembers(rest, tok.next, ty)
 	ty.align = 1
 
 	// Assign offsets within the struct to members.
@@ -703,6 +747,11 @@ func structDecl(rest **Token, tok *Token) *Type {
 		}
 	}
 	ty.size = alignTo(offset, ty.align)
+
+	// Register the struct type if a name was given.
+	if tag != nil {
+		pushTagScope(tag, ty)
+	}
 
 	return ty
 }
