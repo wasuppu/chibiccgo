@@ -102,11 +102,12 @@ type Node struct {
 	val  int64 // Used if kind == ND_NUM
 }
 
-// Scope for local or global variables.
+// Scope for local, global variables or typedefs.
 type VarScope struct {
-	next *VarScope
-	name string
-	vara *Obj
+	next    *VarScope
+	name    string
+	vara    *Obj
+	typedef *Type
 }
 
 // Scope for struct or union tags
@@ -114,6 +115,11 @@ type TagScope struct {
 	next *TagScope
 	name string
 	ty   *Type
+}
+
+// Variable attributes such as typedef or extern.
+type VarAttr struct {
+	isTypedef bool
 }
 
 // Represents a block scope.
@@ -134,8 +140,8 @@ func leaveScope() {
 	scope = scope.next
 }
 
-func pushScope(name string, vara *Obj) *VarScope {
-	sc := &VarScope{name: name, vara: vara, next: scope.vars}
+func pushScope(name string) *VarScope {
+	sc := &VarScope{name: name, next: scope.vars}
 	scope.vars = sc
 	return sc
 }
@@ -150,11 +156,11 @@ func pushTagScope(tok *Token, ty *Type) {
 }
 
 // Find a variable by name.
-func findVar(tok *Token) *Obj {
+func findVar(tok *Token) *VarScope {
 	for sc := scope; sc != nil; sc = sc.next {
 		for sc2 := sc.vars; sc2 != nil; sc2 = sc2.next {
 			if tok.equal(sc2.name) {
-				return sc2.vara
+				return sc2
 			}
 		}
 	}
@@ -214,7 +220,7 @@ func NewVar(name string, ty *Type) *Obj {
 		name: name,
 		ty:   ty,
 	}
-	pushScope(name, vara)
+	pushScope(name).vara = vara
 	return vara
 }
 
@@ -251,6 +257,16 @@ func newStringLiteral(p string, ty *Type) *Obj {
 	return vara
 }
 
+func findTypedef(tok *Token) *Type {
+	if tok.kind == TK_IDENT {
+		sc := findVar(tok)
+		if sc != nil {
+			return sc.typedef
+		}
+	}
+	return nil
+}
+
 func getIdent(tok *Token) string {
 	if tok.kind != TK_IDENT {
 		failTok(tok, "expected an identifier")
@@ -258,11 +274,11 @@ func getIdent(tok *Token) string {
 	return tok.lexeme
 }
 
-func getNumber(tok *Token) int {
+func getNumber(tok *Token) int64 {
 	if tok.kind != TK_NUM {
 		failTok(tok, "expected a number")
 	}
-	return int(tok.val)
+	return tok.val
 }
 
 const (
@@ -275,19 +291,39 @@ const (
 )
 
 // declspec = ("void" | "char" | "short" | "int" | "long"
-// | struct-decl | union-decl)+
-func declspec(rest **Token, tok *Token) *Type {
+// | "typedef"
+// | struct-decl | union-decl | typedef-name)+
+func declspec(rest **Token, tok *Token, attr *VarAttr) *Type {
 	ty := tyInt
 	counter := 0
 
 	for isTypename(tok) {
+		// Handle "typedef" keyword
+		if tok.equal("typedef") {
+			if attr == nil {
+				failTok(tok, "storage class specifier is not allowed in this context")
+			}
+			attr.isTypedef = true
+			tok = tok.next
+			continue
+		}
+
 		// Handle user-defined types.
-		if tok.equal("struct") || tok.equal("union") {
+		ty2 := findTypedef(tok)
+		if tok.equal("struct") || tok.equal("union") || ty2 != nil {
+			if counter != 0 {
+				break
+			}
+
 			if tok.equal("struct") {
 				ty = structDecl(&tok, tok.next)
-			} else {
+			} else if tok.equal("union") {
 				ty = unionDecl(&tok, tok.next)
+			} else {
+				ty = ty2
+				tok = tok.next
 			}
+
 			counter += OTHER
 			continue
 		}
@@ -341,7 +377,7 @@ func funcParams(rest **Token, tok *Token, ty *Type) *Type {
 		if cur != &head {
 			tok = tok.skip(",")
 		}
-		basety := declspec(&tok, tok)
+		basety := declspec(&tok, tok, nil)
 		ty := declarator(&tok, tok, basety)
 		cur.next = copyType(ty)
 		cur = cur.next
@@ -365,7 +401,7 @@ func typeSuffix(rest **Token, tok *Token, ty *Type) *Type {
 		sz := getNumber(tok.next)
 		tok = tok.next.next.skip("]")
 		ty = typeSuffix(rest, tok, ty)
-		return arrayOf(ty, sz)
+		return arrayOf(ty, int(sz))
 	}
 
 	*rest = tok
@@ -397,9 +433,7 @@ func declarator(rest **Token, tok *Token, ty *Type) *Type {
 }
 
 // declaration = declspec (declarator ("=" expr)? ("," declarator ("=" expr)?)*)? ";"
-func declaration(rest **Token, tok *Token) *Node {
-	basety := declspec(&tok, tok)
-
+func declaration(rest **Token, tok *Token, basety *Type) *Node {
 	head := Node{}
 	cur := &head
 	i := 0
@@ -436,6 +470,7 @@ func declaration(rest **Token, tok *Token) *Node {
 
 var typenames = []string{
 	"void", "char", "short", "int", "long", "struct", "union",
+	"typedef",
 }
 
 // Returns true if a given token represents a type.
@@ -445,7 +480,7 @@ func isTypename(tok *Token) bool {
 			return true
 		}
 	}
-	return false
+	return findTypedef(tok) != nil
 }
 
 // stmt = "return" expr ";"
@@ -511,7 +546,7 @@ func stmt(rest **Token, tok *Token) *Node {
 	return exprStmt(rest, tok)
 }
 
-// compound-stmt = (declaration | stmt)* "}"
+// compound-stmt = (typedef | declaration | stmt)* "}"
 func compoundStmt(rest **Token, tok *Token) *Node {
 	node := NewNode(ND_BLOCK, tok)
 
@@ -522,7 +557,15 @@ func compoundStmt(rest **Token, tok *Token) *Node {
 
 	for !tok.equal("}") {
 		if isTypename(tok) {
-			cur.next = declaration(&tok, tok)
+			attr := VarAttr{}
+			basety := declspec(&tok, tok, &attr)
+
+			if attr.isTypedef {
+				tok = parseTypedef(tok, basety)
+				continue
+			}
+
+			cur.next = declaration(&tok, tok, basety)
 			cur = cur.next
 		} else {
 			cur.next = stmt(&tok, tok)
@@ -759,7 +802,7 @@ func structMembers(rest **Token, tok *Token, ty *Type) {
 	cur := &head
 
 	for !tok.equal("}") {
-		basety := declspec(&tok, tok)
+		basety := declspec(&tok, tok, nil)
 		i := 0
 
 		for !consume(&tok, tok, ";") {
@@ -964,12 +1007,12 @@ func primary(rest **Token, tok *Token) *Node {
 		}
 
 		// Variable
-		vara := findVar(tok)
-		if vara == nil {
+		sc := findVar(tok)
+		if sc == nil || sc.vara == nil {
 			failTok(tok, "undefined variable")
 		}
 		*rest = tok.next
-		return NewVarNode(vara, tok)
+		return NewVarNode(sc.vara, tok)
 	}
 
 	if tok.kind == TK_STR {
@@ -986,6 +1029,21 @@ func primary(rest **Token, tok *Token) *Node {
 
 	failTok(tok, "expected an expression")
 	return nil
+}
+
+func parseTypedef(tok *Token, basety *Type) *Token {
+	first := true
+
+	for !consume(&tok, tok, ";") {
+		if !first {
+			tok = tok.skip(",")
+		}
+		first = false
+
+		ty := declarator(&tok, tok, basety)
+		pushScope(getIdent(ty.name)).typedef = ty
+	}
+	return tok
 }
 
 func createParamLvars(param *Type) {
@@ -1045,12 +1103,19 @@ func isFunction(tok *Token) bool {
 	return ty.kind == TY_FUNC
 }
 
-// program = (function-definition | global-variable)*
+// program = (typedef | function-definition | global-variable)*
 func parse(tok *Token) *Obj {
 	globals = nil
 
 	for tok.kind != TK_EOF {
-		basety := declspec(&tok, tok)
+		attr := VarAttr{}
+		basety := declspec(&tok, tok, &attr)
+
+		// Typedef
+		if attr.isTypedef {
+			tok = parseTypedef(tok, basety)
+			continue
+		}
 
 		// Function
 		if isFunction(tok) {
