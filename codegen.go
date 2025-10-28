@@ -272,6 +272,10 @@ func (a X64) genExpr(node *Node) {
 		println("  sete %%al")
 		println("  movzx %%al, %%rax")
 		return
+	case ND_BITNOT:
+		a.genExpr(node.lhs)
+		println("  not %%rax")
+		return
 	case ND_FUNCALL:
 		nargs := 0
 		for arg := node.args; arg != nil; arg = arg.next {
@@ -620,6 +624,10 @@ func (a RiscV) genExpr(node *Node) {
 	case ND_NOT:
 		a.genExpr(node.lhs)
 		println("  seqz a0, a0")
+		return
+	case ND_BITNOT:
+		a.genExpr(node.lhs)
+		println("  not a0, a0")
 		return
 	case ND_FUNCALL:
 		nargs := 0

@@ -65,6 +65,7 @@ const (
 	ND_ADDR                      // unary &
 	ND_DEREF                     // unary *
 	ND_NOT                       // !
+	ND_BITNOT                    // ~
 	ND_RETURN                    // "return"
 	ND_IF                        // "if"
 	ND_FOR                       // "for"
@@ -967,7 +968,7 @@ func cast(rest **Token, tok *Token) *Node {
 	return unary(rest, tok)
 }
 
-// unary = ("+" | "-" | "*" | "&" | "!") cast
+// unary = ("+" | "-" | "*" | "&" | "!" | "~") cast
 // | ("++" | "--") unary
 // | postfix
 func unary(rest **Token, tok *Token) *Node {
@@ -989,6 +990,10 @@ func unary(rest **Token, tok *Token) *Node {
 
 	if tok.equal("!") {
 		return NewUnary(ND_NOT, cast(rest, tok.next), tok)
+	}
+
+	if tok.equal("~") {
+		return NewUnary(ND_BITNOT, cast(rest, tok.next), tok)
 	}
 
 	// Read ++i as i+=1
