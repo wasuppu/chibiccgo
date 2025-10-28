@@ -11,6 +11,7 @@ const (
 	TY_PTR
 	TY_FUNC
 	TY_ARRAY
+	TY_STRUCT
 )
 
 type Type struct {
@@ -25,6 +26,9 @@ type Type struct {
 
 	// Array
 	arrayLen int
+
+	// Struct
+	members *Member
 
 	// Function type
 	returnTy *Type
@@ -101,6 +105,9 @@ func (node *Node) addType() {
 		return
 	case ND_COMMA:
 		node.ty = node.rhs.ty
+		return
+	case ND_MEMBER:
+		node.ty = node.member.ty
 		return
 	case ND_ADDR:
 		if node.lhs.ty.kind == TY_ARRAY {

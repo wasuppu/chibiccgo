@@ -103,6 +103,10 @@ func (a X64) genAddr(node *Node) {
 		a.genExpr(node.lhs)
 		a.genAddr(node.rhs)
 		return
+	case ND_MEMBER:
+		a.genAddr(node.lhs)
+		println("  add $%d, %%rax", node.member.offset)
+		return
 	}
 
 	failTok(node.tok, "not an lvalue")
@@ -120,7 +124,7 @@ func (a X64) genExpr(node *Node) {
 		a.genExpr(node.lhs)
 		println("  neg %%rax")
 		return
-	case ND_VAR:
+	case ND_VAR, ND_MEMBER:
 		a.genAddr(node)
 		a.load(node.ty)
 		return
@@ -363,6 +367,11 @@ func (a RiscV) genAddr(node *Node) {
 		a.genExpr(node.lhs)
 		a.genAddr(node.rhs)
 		return
+	case ND_MEMBER:
+		a.genAddr(node.lhs)
+		println("  li t0, %d", node.member.offset)
+		println("  add a0, a0, t0")
+		return
 	}
 
 	failTok(node.tok, "not an lvalue")
@@ -380,7 +389,7 @@ func (a RiscV) genExpr(node *Node) {
 		a.genExpr(node.lhs)
 		println("  neg a0, a0")
 		return
-	case ND_VAR:
+	case ND_VAR, ND_MEMBER:
 		a.genAddr(node)
 		a.load(node.ty)
 		return

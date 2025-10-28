@@ -10,6 +10,14 @@ var locals *Obj
 var globals *Obj
 var scope = &Scope{}
 
+// Struct member
+type Member struct {
+	next   *Member
+	ty     *Type
+	name   *Token
+	offset int
+}
+
 // Variable or function
 type Obj struct {
 	next    *Obj
@@ -48,6 +56,7 @@ const (
 	ND_LE                        // <=
 	ND_ASSIGN                    // =
 	ND_COMMA                     // ,
+	ND_MEMBER                    // . (struct member access)
 	ND_ADDR                      // unary &
 	ND_DEREF                     // unary *
 	ND_RETURN                    // "return"
@@ -80,6 +89,9 @@ type Node struct {
 
 	// Block or statement expression
 	body *Node
+
+	// Struct member access
+	member *Member
 
 	// Function call
 	funcname string
@@ -222,15 +234,24 @@ func getNumber(tok *Token) int {
 	return tok.val
 }
 
-// declspec = "char" | "int"
+// declspec = "char" | "int" | struct-decl
 func declspec(rest **Token, tok *Token) *Type {
 	if tok.equal("char") {
 		*rest = tok.next
 		return tyChar
 	}
 
-	*rest = tok.skip("int")
-	return tyInt
+	if tok.equal("int") {
+		*rest = tok.next
+		return tyInt
+	}
+
+	if tok.equal("struct") {
+		return structDecl(rest, tok.next)
+	}
+
+	failTok(tok, "typename expected")
+	return nil
 }
 
 // func-params = (param ("," param)*)? ")"
@@ -325,7 +346,7 @@ func declaration(rest **Token, tok *Token) *Node {
 
 // Returns true if a given token represents a type.
 func isTypename(tok *Token) bool {
-	return tok.equal("char") || tok.equal("int")
+	return tok.equal("char") || tok.equal("int") || tok.equal("struct")
 }
 
 // stmt = "return" expr ";"
@@ -633,20 +654,97 @@ func unary(rest **Token, tok *Token) *Node {
 	return postfix(rest, tok)
 }
 
-// postfix = primary ("[" expr "]")*
+// struct-members = (declspec declarator (","  declarator)* ";")*
+func structMembers(rest **Token, tok *Token, ty *Type) {
+	head := Member{}
+	cur := &head
+
+	for !tok.equal("}") {
+		basety := declspec(&tok, tok)
+		i := 0
+
+		for !consume(&tok, tok, ";") {
+			if i != 0 {
+				tok = tok.skip(",")
+			}
+			i++
+
+			mem := &Member{}
+			mem.ty = declarator(&tok, tok, basety)
+			mem.name = mem.ty.name
+			cur.next = mem
+			cur = cur.next
+		}
+	}
+
+	*rest = tok.next
+	ty.members = head.next
+}
+
+// struct-decl = "{" struct-members
+func structDecl(rest **Token, tok *Token) *Type {
+	tok = tok.skip("{")
+
+	// Construct a struct object.
+	ty := &Type{}
+	ty.kind = TY_STRUCT
+	structMembers(rest, tok, ty)
+
+	// Assign offsets within the struct to members.
+	offset := 0
+	for mem := ty.members; mem != nil; mem = mem.next {
+		mem.offset = offset
+		offset += mem.ty.size
+	}
+	ty.size = offset
+
+	return ty
+}
+
+func getStructMember(ty *Type, tok *Token) *Member {
+	for mem := ty.members; mem != nil; mem = mem.next {
+		if mem.name.len == tok.len && mem.name.lexeme == tok.lexeme {
+			return mem
+		}
+	}
+	failTok(tok, "no such member")
+	return nil
+}
+
+func structRef(lhs *Node, tok *Token) *Node {
+	lhs.addType()
+	if lhs.ty.kind != TY_STRUCT {
+		failTok(lhs.tok, "not a struct")
+	}
+
+	node := NewUnary(ND_MEMBER, lhs, tok)
+	node.member = getStructMember(lhs.ty, tok)
+	return node
+}
+
+// postfix = primary ("[" expr "]" | "." ident)*
 func postfix(rest **Token, tok *Token) *Node {
 	node := primary(&tok, tok)
 
-	for tok.equal("[") {
-		// x[y] is short for *(x+y)
-		start := tok
-		idx := expr(&tok, tok.next)
-		tok = tok.skip("]")
-		node = NewUnary(ND_DEREF, newAdd(node, idx, start), start)
-	}
+	for {
+		if tok.equal("[") {
+			// x[y] is short for *(x+y)
+			start := tok
+			idx := expr(&tok, tok.next)
+			tok = tok.skip("]")
+			node = NewUnary(ND_DEREF, newAdd(node, idx, start), start)
+			continue
+		}
 
-	*rest = tok
-	return node
+		if tok.equal(".") {
+			node = structRef(node, tok.next)
+			tok = tok.next.next
+			continue
+		}
+
+		*rest = tok
+		return node
+	}
 }
 
 // funcall = ident "(" (assign ("," assign)*)? ")"

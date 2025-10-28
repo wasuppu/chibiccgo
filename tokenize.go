@@ -14,7 +14,10 @@ var source string
 var currentInputLoc int
 var currentFilename string
 
-var kws = []string{"return", "if", "else", "for", "while", "int", "sizeof", "char"}
+var kws = []string{
+	"return", "if", "else", "for", "while", "int", "sizeof", "char",
+	"struct",
+}
 
 // Token
 type TokenKind int
