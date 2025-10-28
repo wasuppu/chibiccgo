@@ -745,9 +745,23 @@ func (a X64) genExpr(node *Node) {
 
 		println("  neg %%rax")
 		return
-	case ND_VAR, ND_MEMBER:
+	case ND_VAR:
 		a.genAddr(node)
 		a.load(node.ty)
+		return
+	case ND_MEMBER:
+		a.genAddr(node)
+		a.load(node.ty)
+
+		mem := node.member
+		if mem.isBitfield {
+			println("  shl $%d, %%rax", 64-mem.bitWidth-mem.bitOffset)
+			if mem.ty.isUnsigned {
+				println("  shr $%d, %%rax", 64-mem.bitWidth)
+			} else {
+				println("  sar $%d, %%rax", 64-mem.bitWidth)
+			}
+		}
 		return
 	case ND_DEREF:
 		a.genExpr(node.lhs)
@@ -760,6 +774,25 @@ func (a X64) genExpr(node *Node) {
 		a.genAddr(node.lhs)
 		a.push()
 		a.genExpr(node.rhs)
+
+		if node.lhs.kind == ND_MEMBER && node.lhs.member.isBitfield {
+			// If the lhs is a bitfield, we need to read the current value
+			// from memory and merge it with a new value.
+			mem := node.lhs.member
+
+			println("  mov %%rax, %%rdi")
+			println("  and $%d, %%rdi", (1<<mem.bitWidth)-1)
+			println("  shl $%d, %%rdi", mem.bitOffset)
+
+			println("  mov (%%rsp), %%rax")
+			a.load(mem.ty)
+
+			mask := ((1 << mem.bitWidth) - 1) << mem.bitOffset
+			println("  mov $%d, %%r9", ^mask)
+			println("  and %%r9, %%rax")
+			println("  or %%rdi, %%rax")
+		}
+
 		a.store(node.ty)
 		return
 	case ND_STMT_EXPR:

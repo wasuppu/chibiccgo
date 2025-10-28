@@ -63,6 +63,11 @@ type Member struct {
 	idx    int
 	align  int
 	offset int
+
+	// Bitfield
+	isBitfield bool
+	bitOffset  int
+	bitWidth   int
 }
 
 // Variable or function
@@ -238,6 +243,10 @@ type Scope struct {
 	// for struct tags.
 	vars *VarScope
 	tags *TagScope
+}
+
+func alignDown(n, align int) int {
+	return alignTo(n-align+1, align)
 }
 
 func enterScope() {
@@ -2231,6 +2240,12 @@ func structMembers(rest **Token, tok *Token, ty *Type) {
 			} else {
 				mem.align = mem.ty.align
 			}
+
+			if consume(&tok, tok, ":") {
+				mem.isBitfield = true
+				mem.bitWidth = int(constExpr(&tok, tok))
+			}
+
 			cur.next = mem
 			cur = cur.next
 		}
@@ -2303,17 +2318,28 @@ func structDecl(rest **Token, tok *Token) *Type {
 	}
 
 	// Assign offsets within the struct to members.
-	offset := 0
+	bits := 0
 	for mem := ty.members; mem != nil; mem = mem.next {
-		offset = alignTo(offset, mem.align)
-		mem.offset = offset
-		offset += mem.ty.size
+		if mem.isBitfield {
+			sz := mem.ty.size
+			if bits/(sz*8) != (bits+mem.bitWidth-1)/(sz*8) {
+				bits = alignTo(bits, sz*8)
+			}
+
+			mem.offset = alignDown(bits/8, sz)
+			mem.bitOffset = bits % (sz * 8)
+			bits += mem.bitWidth
+		} else {
+			bits = alignTo(bits, mem.align*8)
+			mem.offset = bits / 8
+			bits += mem.ty.size * 8
+		}
 
 		if ty.align < mem.align {
 			ty.align = mem.align
 		}
 	}
-	ty.size = alignTo(offset, ty.align)
+	ty.size = alignTo(bits, ty.align*8) / 8
 	return ty
 }
 
