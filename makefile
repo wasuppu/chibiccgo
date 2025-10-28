@@ -19,7 +19,7 @@ chibicc:
 
 $(TEST_DIR)/%.exe: chibicc test/%.c
 	mkdir -p $(TEST_DIR)
-	./chibicc -march=$(ARCH) -c -o $(TEST_DIR)/$*.o test/$*.c
+	./chibicc -march=$(ARCH) -Itest -c -o $(TEST_DIR)/$*.o test/$*.c
 	$(CC) $(FLAG) -o $@ $(TEST_DIR)/$*.o -xc test/common
 
 test: $(TESTS)
@@ -42,7 +42,7 @@ stage2/%.o: chibicc self.py ./source/%.c
 
 stage2/test/%.exe: stage2/chibicc test/%.c
 	mkdir -p stage2/test
-	$(RUN) ./stage2/chibicc -c -o stage2/test/$*.o test/$*.c
+	$(RUN) ./stage2/chibicc -Itest -c -o stage2/test/$*.o test/$*.c
 	gcc -o $@ stage2/test/$*.o -xc test/common
 
 test-stage2: $(patsubst $(TEST_DIR)/%.exe,stage2/test/%.exe,$(TESTS))

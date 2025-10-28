@@ -21,6 +21,7 @@ var outfile string
 
 var inputPaths []string
 var tmpfiles []string
+var includePaths []string
 
 var rvpath = "/opt/riscv-linux"
 
@@ -30,7 +31,15 @@ func usage(status int) {
 }
 
 func takeArg(arg string) bool {
-	return arg == "-o"
+	x := []string{"-o", "-I"}
+
+	for i := range x {
+		if arg == x[i] {
+			return true
+		}
+	}
+
+	return false
 }
 
 func parseArgs(args []string) {
@@ -88,6 +97,11 @@ func parseArgs(args []string) {
 
 		if args[i] == "-E" {
 			optE = true
+			continue
+		}
+
+		if strings.HasPrefix(args[i], "-I") {
+			includePaths = append(includePaths, args[i][2:])
 			continue
 		}
 
