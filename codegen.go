@@ -173,11 +173,23 @@ func (a RiscV) genExpr(node *Node) {
 	fail("invalid expression")
 }
 
+func genStmt(target Arch, node *Node) {
+	if node.kind == ND_EXPR_STMT {
+		target.genExpr(node.lhs)
+		return
+	}
+
+	fail("invalid statement")
+}
+
 func codegen(arch string, node *Node) {
 	target := chooseArch(arch)
 	target.prologue()
-	target.genExpr(node)
-	target.epilogue()
 
-	assert(depth == 0)
+	for n := node; n != nil; n = n.next {
+		genStmt(target, n)
+		assert(depth == 0)
+	}
+
+	target.epilogue()
 }
