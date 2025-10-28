@@ -299,7 +299,7 @@ func (a X64) genStmt(node *Node) {
 
 func (a X64) emitText(prog *Obj) {
 	for fn := prog; fn != nil; fn = fn.next {
-		if !fn.isFunction {
+		if !fn.isFunction || !fn.isDefinition {
 			continue
 		}
 
@@ -598,7 +598,7 @@ func (a RiscV) genStmt(node *Node) {
 
 func (a RiscV) emitText(prog *Obj) {
 	for fn := prog; fn != nil; fn = fn.next {
-		if !fn.isFunction {
+		if !fn.isFunction || !fn.isDefinition {
 			continue
 		}
 

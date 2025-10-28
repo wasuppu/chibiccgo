@@ -29,7 +29,8 @@ type Obj struct {
 	offset int
 
 	// Global variable or function
-	isFunction bool
+	isFunction   bool
+	isDefinition bool
 
 	// Global variable
 	initData string
@@ -955,6 +956,11 @@ func function(tok *Token, basety *Type) *Token {
 
 	fn := NewGVar(getIdent(ty.name), ty)
 	fn.isFunction = true
+	fn.isDefinition = !consume(&tok, tok, ";")
+
+	if !fn.isDefinition {
+		return tok
+	}
 
 	locals = nil
 	enterScope()
