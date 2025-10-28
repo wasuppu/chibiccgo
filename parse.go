@@ -1,6 +1,9 @@
 package main
 
-import "fmt"
+import (
+	"encoding/binary"
+	"fmt"
+)
 
 // All local variable instances created during parsing are
 // accumulated to this list.
@@ -923,6 +926,47 @@ func lvarInitializer(rest **Token, tok *Token, vara *Obj) *Node {
 
 	rhs := createLVarInit(init, vara.ty, &desg, tok)
 	return NewBinary(ND_COMMA, lhs, rhs, tok)
+}
+
+func writeBuf(buf []byte, val uint64, sz int) {
+	switch sz {
+	case 1:
+		buf[0] = byte(val)
+	case 2:
+		binary.LittleEndian.PutUint16(buf, uint16(val))
+	case 4:
+		binary.LittleEndian.PutUint32(buf, uint32(val))
+	case 8:
+		binary.LittleEndian.PutUint64(buf, val)
+	default:
+		unreachable()
+	}
+}
+
+func writeGVarData(init *Initializer, ty *Type, buf []byte, offset int) {
+	if ty.kind == TY_ARRAY {
+		sz := ty.base.size
+		for i := range ty.arrayLen {
+			writeGVarData(init.children[i], ty.base, buf, offset+sz*i)
+		}
+		return
+	}
+
+	if init.expr != nil {
+		writeBuf(buf[offset:], uint64(eval(init.expr)), ty.size)
+	}
+}
+
+// Initializers for global variables are evaluated at compile-time and
+// embedded to .data section. This function serializes Initializer
+// objects to a flat byte array. It is a compile error if an
+// initializer list contains a non-constant expression.
+func gvarInitializer(rest **Token, tok *Token, vara *Obj) {
+	init := initializer(rest, tok, vara.ty, &vara.ty)
+
+	buf := make([]byte, vara.ty.size)
+	writeGVarData(init, vara.ty, buf, 0)
+	vara.initData = string(buf)
 }
 
 var typenames = []string{
@@ -2081,7 +2125,10 @@ func globalVariable(tok *Token, basety *Type) *Token {
 		first = false
 
 		ty := declarator(&tok, tok, basety)
-		NewGVar(getIdent(ty.name), ty)
+		vara := NewGVar(getIdent(ty.name), ty)
+		if tok.equal("=") {
+			gvarInitializer(&tok, tok.next, vara)
+		}
 	}
 	return tok
 }
