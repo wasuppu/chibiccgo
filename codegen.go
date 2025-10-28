@@ -970,8 +970,17 @@ func emitData(prog *Obj) {
 		println("%s:", vara.name)
 
 		if len(vara.initData) > 0 {
-			for i := 0; i < vara.ty.size; i++ {
-				println("  .byte %d", vara.initData[i])
+			rel := vara.rel
+			pos := 0
+			for pos < vara.ty.size {
+				if rel != nil && rel.offset == pos {
+					println("  .quad %s%+d", rel.label, rel.addend)
+					rel = rel.next
+					pos += 8
+				} else {
+					println("  .byte %d", vara.initData[pos])
+					pos++
+				}
 			}
 		} else {
 			println("  .zero %d", vara.ty.size)

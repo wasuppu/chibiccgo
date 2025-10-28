@@ -80,12 +80,23 @@ type Obj struct {
 
 	// Global variable
 	initData string
+	rel      *Relocation
 
 	// Function
 	params    *Obj
 	body      *Node
 	locals    *Obj
 	stackSize int
+}
+
+// Global variable can be initialized either by a constant expression
+// or a pointer to another global variable. This struct represents the
+// latter.
+type Relocation struct {
+	next   *Relocation
+	offset int
+	label  string
+	addend int64
 }
 
 // AST node
@@ -943,25 +954,41 @@ func writeBuf(buf []byte, val uint64, sz int) {
 	}
 }
 
-func writeGVarData(init *Initializer, ty *Type, buf []byte, offset int) {
+func writeGVarData(cur *Relocation, init *Initializer, ty *Type, buf []byte, offset int) *Relocation {
 	if ty.kind == TY_ARRAY {
 		sz := ty.base.size
 		for i := range ty.arrayLen {
-			writeGVarData(init.children[i], ty.base, buf, offset+sz*i)
+			cur = writeGVarData(cur, init.children[i], ty.base, buf, offset+sz*i)
 		}
-		return
+		return cur
 	}
 
 	if ty.kind == TY_STRUCT {
 		for mem := ty.members; mem != nil; mem = mem.next {
-			writeGVarData(init.children[mem.idx], mem.ty, buf, offset+mem.offset)
+			cur = writeGVarData(cur, init.children[mem.idx], mem.ty, buf, offset+mem.offset)
 		}
-		return
+		return cur
 	}
 
-	if init.expr != nil {
-		writeBuf(buf[offset:], uint64(eval(init.expr)), ty.size)
+	if ty.kind == TY_UNION {
+		return writeGVarData(cur, init.children[0], ty.members.ty, buf, offset)
 	}
+
+	if init.expr == nil {
+		return cur
+	}
+
+	var label string
+	val := uint64(eval2(init.expr, &label))
+
+	if len(label) == 0 {
+		writeBuf(buf[offset:], val, ty.size)
+		return cur
+	}
+
+	rel := &Relocation{offset: offset, label: label, addend: int64(val)}
+	cur.next = rel
+	return cur.next
 }
 
 // Initializers for global variables are evaluated at compile-time and
@@ -971,9 +998,11 @@ func writeGVarData(init *Initializer, ty *Type, buf []byte, offset int) {
 func gvarInitializer(rest **Token, tok *Token, vara *Obj) {
 	init := initializer(rest, tok, vara.ty, &vara.ty)
 
+	head := Relocation{}
 	buf := make([]byte, vara.ty.size)
-	writeGVarData(init, vara.ty, buf, 0)
+	writeGVarData(&head, init, vara.ty, buf, 0)
 	vara.initData = string(buf)
+	vara.rel = head.next
 }
 
 var typenames = []string{
@@ -1243,13 +1272,24 @@ func expr(rest **Token, tok *Token) *Node {
 
 // Evaluate a given node as a constant expression.
 func eval(node *Node) int64 {
+	var label string
+	return eval2(node, &label)
+}
+
+// Evaluate a given node as a constant expression.
+//
+// A constant expression is either just a number or ptr+n where ptr
+// is a pointer to a global variable and n is a postiive/negative
+// number. The latter form is accepted only as an initialization
+// expression for a global variable.
+func eval2(node *Node, label *string) int64 {
 	node.addType()
 
 	switch node.kind {
 	case ND_ADD:
-		return eval(node.lhs) + eval(node.rhs)
+		return eval2(node.lhs, label) + eval(node.rhs)
 	case ND_SUB:
-		return eval(node.lhs) - eval(node.rhs)
+		return eval2(node.lhs, label) - eval(node.rhs)
 	case ND_MUL:
 		return eval(node.lhs) * eval(node.rhs)
 	case ND_DIV:
@@ -1294,12 +1334,12 @@ func eval(node *Node) int64 {
 		}
 	case ND_COND:
 		if eval(node.cond) != 0 {
-			return eval(node.then)
+			return eval2(node.then, label)
 		} else {
-			return eval(node.els)
+			return eval2(node.els, label)
 		}
 	case ND_COMMA:
-		return eval(node.rhs)
+		return eval2(node.rhs, label)
 	case ND_NOT:
 		if eval(node.lhs) == 0 {
 			return 1
@@ -1321,22 +1361,60 @@ func eval(node *Node) int64 {
 			return 0
 		}
 	case ND_CAST:
+		val := eval2(node.lhs, label)
 		if node.ty.isInteger() {
 			switch node.ty.size {
 			case 1:
-				return int64(uint8(eval(node.lhs)))
+				return int64(uint8(val))
 			case 2:
-				return int64(uint16(eval(node.lhs)))
+				return int64(uint16(val))
 			case 4:
-				return int64(uint32(eval(node.lhs)))
+				return int64(uint32(val))
 			}
 		}
-		return eval(node.lhs)
+		return val
+	case ND_ADDR:
+		return evalRVal(node.lhs, label)
+	case ND_MEMBER:
+		if len(*label) != 0 {
+			failTok(node.tok, "not a compile-time constant ndmember")
+		}
+		if node.ty.kind != TY_ARRAY {
+			failTok(node.tok, "invalid initializer")
+		}
+		return evalRVal(node.lhs, label) + int64(node.member.offset)
+	case ND_VAR:
+		if len(*label) != 0 {
+			failTok(node.tok, "not a compile-time constant ndvar")
+		}
+		if node.vara.ty.kind != TY_ARRAY && node.vara.ty.kind != TY_FUNC {
+			failTok(node.tok, "invalid initializer")
+		}
+		*label = node.vara.name
+		return 0
 	case ND_NUM:
 		return node.val
 	}
 
 	failTok(node.tok, "not a compile-time constant")
+	return -1
+}
+
+func evalRVal(node *Node, label *string) int64 {
+	switch node.kind {
+	case ND_VAR:
+		if node.vara.isLocal {
+			failTok(node.tok, "not a compile-time constant evalrel")
+		}
+		*label = node.vara.name
+		return 0
+	case ND_DEREF:
+		return eval2(node.lhs, label)
+	case ND_MEMBER:
+		return evalRVal(node.lhs, label) + int64(node.member.offset)
+	}
+
+	failTok(node.tok, "invalid initializer")
 	return -1
 }
 
