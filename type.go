@@ -15,6 +15,7 @@ var tyULong = &Type{kind: TY_LONG, size: 8, align: 8, isUnsigned: true}
 
 var tyFloat = &Type{kind: TY_FLOAT, size: 4, align: 4}
 var tyDouble = &Type{kind: TY_DOUBLE, size: 8, align: 8}
+var tyLDouble = &Type{kind: TY_LDOUBLE, size: 16, align: 16}
 
 type TypeKind int
 
@@ -27,6 +28,7 @@ const (
 	TY_LONG
 	TY_FLOAT
 	TY_DOUBLE
+	TY_LDOUBLE
 	TY_ENUM
 	TY_PTR
 	TY_FUNC
@@ -85,7 +87,7 @@ func (ty Type) isInteger() bool {
 }
 
 func (ty Type) isFlonum() bool {
-	return ty.kind == TY_FLOAT || ty.kind == TY_DOUBLE
+	return ty.kind == TY_FLOAT || ty.kind == TY_DOUBLE || ty.kind == TY_LDOUBLE
 }
 
 func (ty Type) isNumeric() bool {
@@ -112,7 +114,7 @@ func isCompatible(t1, t2 *Type) bool {
 	switch t1.kind {
 	case TY_CHAR, TY_SHORT, TY_INT, TY_LONG:
 		return t1.isUnsigned == t2.isUnsigned
-	case TY_FLOAT, TY_DOUBLE:
+	case TY_FLOAT, TY_DOUBLE, TY_LDOUBLE:
 		return true
 	case TY_PTR:
 		return isCompatible(t1.base, t2.base)
@@ -189,6 +191,9 @@ func getCommonType(ty1, ty2 *Type) *Type {
 		return pointerTo(ty2)
 	}
 
+	if ty1.kind == TY_LDOUBLE || ty2.kind == TY_LDOUBLE {
+		return tyLDouble
+	}
 	if ty1.kind == TY_DOUBLE || ty2.kind == TY_DOUBLE {
 		return tyDouble
 	}

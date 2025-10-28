@@ -36,6 +36,7 @@ const (
 	U64
 	F32
 	F64
+	F80
 )
 
 // The table for x64 type casts
@@ -46,18 +47,23 @@ var i32u16x = "movzwl %ax, %eax"
 var i32f32x = "cvtsi2ssl %eax, %xmm0"
 var i32i64x = "movsxd %eax, %rax"
 var i32f64x = "cvtsi2sdl %eax, %xmm0"
+var i32f80x = "mov %eax, -4(%rsp); fildl -4(%rsp)"
 
 var u32f32x = "mov %eax, %eax; cvtsi2ssq %rax, %xmm0"
 var u32i64x = "mov %eax, %eax"
 var u32f64x = "mov %eax, %eax; cvtsi2sdq %rax, %xmm0"
+var u32f80x = "mov %eax, %eax; mov %rax, -8(%rsp); fildll -8(%rsp)"
 
 var i64f32x = "cvtsi2ssq %rax, %xmm0"
 var i64f64x = "cvtsi2sdq %rax, %xmm0"
+var i64f80x = "movq %rax, -8(%rsp); fildll -8(%rsp)"
 
 var u64f32x = "cvtsi2ssq %rax, %xmm0"
 var u64f64x = "test %rax,%rax; js 1f; pxor %xmm0,%xmm0; cvtsi2sd %rax,%xmm0; jmp 2f; " +
 	"1: mov %rax,%rdi; and $1,%eax; pxor %xmm0,%xmm0; shr %rdi; " +
 	"or %rax,%rdi; cvtsi2sd %rdi,%xmm0; addsd %xmm0,%xmm0; 2:"
+var u64f80x = "mov %rax, -8(%rsp); fildq -8(%rsp); test %rax, %rax; jns 1f;" +
+	"mov $1602224128, %eax; mov %eax, -4(%rsp); fadds -4(%rsp); 1:"
 
 var f32i8x = "cvttss2sil %xmm0, %eax; movsbl %al, %eax"
 var f32u8x = "cvttss2sil %xmm0, %eax; movzbl %al, %eax"
@@ -68,6 +74,7 @@ var f32u32x = "cvttss2siq %xmm0, %rax"
 var f32i64x = "cvttss2siq %xmm0, %rax"
 var f32u64x = "cvttss2siq %xmm0, %rax"
 var f32f64x = "cvtss2sd %xmm0, %xmm0"
+var f32f80x = "movss %xmm0, -4(%rsp); flds -4(%rsp)"
 
 var f64i8x = "cvttsd2sil %xmm0, %eax; movsbl %al, %eax"
 var f64u8x = "cvttsd2sil %xmm0, %eax; movzbl %al, %eax"
@@ -75,22 +82,39 @@ var f64i16x = "cvttsd2sil %xmm0, %eax; movswl %ax, %eax"
 var f64u16x = "cvttsd2sil %xmm0, %eax; movzwl %ax, %eax"
 var f64i32x = "cvttsd2sil %xmm0, %eax"
 var f64u32x = "cvttsd2siq %xmm0, %rax"
-var f64f32x = "cvtsd2ss %xmm0, %xmm0"
 var f64i64x = "cvttsd2siq %xmm0, %rax"
 var f64u64x = "cvttsd2siq %xmm0, %rax"
+var f64f32x = "cvtsd2ss %xmm0, %xmm0"
+var f64f80x = "movsd %xmm0, -8(%rsp); fldl -8(%rsp)"
+
+var FROM_F80_1 = "fnstcw -10(%rsp); movzwl -10(%rsp), %eax; or $12, %ah; " +
+	"mov %ax, -12(%rsp); fldcw -12(%rsp); "
+var FROM_F80_2 = " -24(%rsp); fldcw -10(%rsp); "
+
+var f80i8x = FROM_F80_1 + "fistps" + FROM_F80_2 + "movsbl -24(%rsp), %eax"
+var f80u8x = FROM_F80_1 + "fistps" + FROM_F80_2 + "movzbl -24(%rsp), %eax"
+var f80i16x = FROM_F80_1 + "fistps" + FROM_F80_2 + "movzbl -24(%rsp), %eax"
+var f80u16x = FROM_F80_1 + "fistpl" + FROM_F80_2 + "movswl -24(%rsp), %eax"
+var f80i32x = FROM_F80_1 + "fistpl" + FROM_F80_2 + "mov -24(%rsp), %eax"
+var f80u32x = FROM_F80_1 + "fistpl" + FROM_F80_2 + "mov -24(%rsp), %eax"
+var f80i64x = FROM_F80_1 + "fistpq" + FROM_F80_2 + "mov -24(%rsp), %rax"
+var f80u64x = FROM_F80_1 + "fistpq" + FROM_F80_2 + "mov -24(%rsp), %rax"
+var f80f32x = "fstps -8(%rsp); movss -8(%rsp), %xmm0"
+var f80f64x = "fstpl -8(%rsp); movsd -8(%rsp), %xmm0"
 
 var x64CastTable = [][]string{
-	// i8   i16   i32   i64   u8   u16   u32   u64   f32   f64
-	{"", "", "", i32i64x, i32u8x, i32u16x, "", i32i64x, i32f32x, i32f64x},               // i8
-	{i32i8x, "", "", i32i64x, i32u8x, i32u16x, "", i32i64x, i32f32x, i32f64x},           // i16
-	{i32i8x, i32i16x, "", i32i64x, i32u8x, i32u16x, "", i32i64x, i32f32x, i32f64x},      // i32
-	{i32i8x, i32i16x, "", "", i32u8x, i32u16x, "", "", i64f32x, i64f64x},                // i64
-	{i32i8x, "", "", i32i64x, "", "", "", i32i64x, i32f32x, i32f64x},                    // u8
-	{i32i8x, i32i16x, "", i32i64x, i32u8x, "", "", i32i64x, i32f32x, i32f64x},           // u16
-	{i32i8x, i32i16x, "", u32i64x, i32u8x, i32u16x, "", u32i64x, u32f32x, u32f64x},      // u32
-	{i32i8x, i32i16x, "", "", i32u8x, i32u16x, "", "", u64f32x, u64f64x},                // u64
-	{f32i8x, f32i16x, f32i32x, f32i64x, f32u8x, f32u16x, f32u32x, f32u64x, "", f32f64x}, // f32
-	{f64i8x, f64i16x, f64i32x, f64i64x, f64u8x, f64u16x, f64u32x, f64u64x, f64f32x, ""}, // f64
+	// i8   i16   i32   i64   u8   u16   u32   u64   f32   f64   f80
+	{"", "", "", i32i64x, i32u8x, i32u16x, "", i32i64x, i32f32x, i32f64x, i32f80x},               // i8
+	{i32i8x, "", "", i32i64x, i32u8x, i32u16x, "", i32i64x, i32f32x, i32f64x, i32f80x},           // i16
+	{i32i8x, i32i16x, "", i32i64x, i32u8x, i32u16x, "", i32i64x, i32f32x, i32f64x, i32f80x},      // i32
+	{i32i8x, i32i16x, "", "", i32u8x, i32u16x, "", "", i64f32x, i64f64x, i64f80x},                // i64
+	{i32i8x, "", "", i32i64x, "", "", "", i32i64x, i32f32x, i32f64x, i32f80x},                    // u8
+	{i32i8x, i32i16x, "", i32i64x, i32u8x, "", "", i32i64x, i32f32x, i32f64x, i32f80x},           // u16
+	{i32i8x, i32i16x, "", u32i64x, i32u8x, i32u16x, "", u32i64x, u32f32x, u32f64x, u32f80x},      // u32
+	{i32i8x, i32i16x, "", "", i32u8x, i32u16x, "", "", u64f32x, u64f64x, u64f80x},                // u64
+	{f32i8x, f32i16x, f32i32x, f32i64x, f32u8x, f32u16x, f32u32x, f32u64x, "", f32f64x, f32f80x}, // f32
+	{f64i8x, f64i16x, f64i32x, f64i64x, f64u8x, f64u16x, f64u32x, f64u64x, f64f32x, "", f64f80x}, // f64
+	{f80i8x, f80i16x, f80i32x, f80i64x, f80u8x, f80u16x, f80u32x, f80u64x, f80f32x, f80f64x, ""}, // f80
 }
 
 // The table for riscv type casts
@@ -183,6 +207,8 @@ func getTypeId(ty *Type) int {
 		return F32
 	case TY_DOUBLE:
 		return F64
+	case TY_LDOUBLE:
+		return F80
 	}
 	return U64
 }
@@ -270,6 +296,9 @@ func (a X64) load(ty *Type) {
 	case TY_DOUBLE:
 		println("  movsd (%%rax), %%xmm0")
 		return
+	case TY_LDOUBLE:
+		println("  fldt (%%rax)")
+		return
 	}
 
 	var insn string
@@ -307,6 +336,9 @@ func (a X64) store(ty *Type) {
 		return
 	case TY_DOUBLE:
 		println("  movsd %%xmm0, (%%rdi)")
+		return
+	case TY_LDOUBLE:
+		println("  fstpt (%%rdi)")
 		return
 	}
 
@@ -354,7 +386,6 @@ func (a X64) storeFP(r, offset, sz int) {
 		println("  movsd %%xmm%d, %d(%%rbp)", r, offset)
 		return
 	}
-
 	unreachable()
 }
 
@@ -386,6 +417,11 @@ func (a X64) cmpZero(ty *Type) {
 	case TY_DOUBLE:
 		println("  xorpd %%xmm1, %%xmm1")
 		println("  ucomisd %%xmm1, %%xmm0")
+		return
+	case TY_LDOUBLE:
+		println("  fldz")
+		println("  fucomip")
+		println("  fstp %%st(0)")
 		return
 	}
 
@@ -427,7 +463,7 @@ func hasFlonum(ty *Type, lo, hi, offset int) bool {
 		return true
 	}
 
-	return offset < lo || hi < offset || ty.isFlonum()
+	return offset < lo || hi < offset || ty.kind == TY_FLOAT || ty.kind == TY_DOUBLE
 }
 
 func hasFlonum1(ty *Type) bool {
@@ -467,6 +503,10 @@ func (a X64) pushArgs2(args *Node, firstPass bool) {
 		a.pushStruct(args.ty)
 	case TY_FLOAT, TY_DOUBLE:
 		a.pushf()
+	case TY_LDOUBLE:
+		println("  sub $16, %%rsp")
+		println("  fstpt (%%rsp)")
+		depth += 2
 	default:
 		a.push()
 	}
@@ -523,6 +563,9 @@ func (a X64) pushArgs(node *Node) int {
 				stack++
 			}
 			fp++
+		case TY_LDOUBLE:
+			arg.passByStack = true
+			stack += 2
 		default:
 			if gp >= GP_MAX_X {
 				arg.passByStack = true
@@ -767,6 +810,15 @@ func (a X64) genExpr(node *Node) {
 			println("  mov $%d, %%rax  # double %f", u64, node.fval)
 			println("  movq %%rax, %%xmm0")
 			return
+		case TY_LDOUBLE:
+			f64 := node.fval
+			u64 := math.Float64bits(f64)
+			println("  mov $%d, %%rax  # long double %f", u64, node.fval)
+			println("  mov %%rax, -16(%%rsp)")
+			println("  mov $%d, %%rax", 0)
+			println("  mov %%rax, -8(%%rsp)")
+			println("  fldt -16(%%rsp)")
+			return
 		}
 
 		println("  mov $%d, %%rax", node.val)
@@ -786,6 +838,9 @@ func (a X64) genExpr(node *Node) {
 			println("  shl $63, %%rax")
 			println("  movq %%rax, %%xmm1")
 			println("  xorpd %%xmm1, %%xmm0")
+			return
+		case TY_LDOUBLE:
+			println("  fchs")
 			return
 		}
 
@@ -981,6 +1036,7 @@ func (a X64) genExpr(node *Node) {
 					a.popf(fp)
 					fp++
 				}
+			case TY_LDOUBLE:
 			default:
 				if gp < GP_MAX_X {
 					a.pop(argReg64x[gp])
@@ -1029,7 +1085,8 @@ func (a X64) genExpr(node *Node) {
 		return
 	}
 
-	if node.lhs.ty.isFlonum() {
+	switch node.lhs.ty.kind {
+	case TY_FLOAT, TY_DOUBLE:
 		a.genExpr(node.rhs)
 		a.pushf()
 		a.genExpr(node.lhs)
@@ -1074,6 +1131,43 @@ func (a X64) genExpr(node *Node) {
 			}
 
 			println("  and $1, %%al")
+			println("  movzb %%al, %%rax")
+			return
+		}
+
+		failTok(node.tok, "invalid expression")
+	case TY_LDOUBLE:
+		a.genExpr(node.lhs)
+		a.genExpr(node.rhs)
+
+		switch node.kind {
+		case ND_ADD:
+			println("  faddp")
+			return
+		case ND_SUB:
+			println("  fsubrp")
+			return
+		case ND_MUL:
+			println("  fmulp")
+			return
+		case ND_DIV:
+			println("  fdivrp")
+			return
+		case ND_EQ, ND_NE, ND_LT, ND_LE:
+			println("  fcomip")
+			println("  fstp %%st(0)")
+
+			switch node.kind {
+			case ND_EQ:
+				println("  sete %%al")
+			case ND_NE:
+				println("  setne %%al")
+			case ND_LT:
+				println("  seta %%al")
+			default:
+				println("  setae %%al")
+			}
+
 			println("  movzb %%al, %%rax")
 			return
 		}
@@ -1261,9 +1355,10 @@ func (a X64) genStmt(node *Node) {
 	case ND_RETURN:
 		if node.lhs != nil {
 			a.genExpr(node.lhs)
-
 			ty := node.lhs.ty
-			if ty.kind == TY_STRUCT || ty.kind == TY_UNION {
+
+			switch ty.kind {
+			case TY_STRUCT, TY_UNION:
 				if ty.size <= 16 {
 					a.copyStructReg()
 				} else {
@@ -2753,6 +2848,7 @@ func (a X64) assignLVarOffsets(prog *Obj) {
 					fp++
 					continue
 				}
+			case TY_LDOUBLE:
 			default:
 				if gp < GP_MAX_X {
 					gp++

@@ -115,7 +115,7 @@ int main() {
   ASSERT(8, sizeof(1.0/2));
 
   // c149
-  ASSERT(8, sizeof(long double));
+  ASSERT(16, sizeof(long double));
 
   // c257
   ASSERT(1, sizeof(main));

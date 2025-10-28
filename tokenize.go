@@ -506,7 +506,7 @@ func convertPPNumber(tok *Token) {
 		ty = tyFloat
 		p++
 	case 'l', 'L':
-		ty = tyDouble
+		ty = tyLDouble
 		p++
 	default:
 		ty = tyDouble
