@@ -413,14 +413,14 @@ func (a X64) genStmt(node *Node) {
 		if node.cond != nil {
 			a.genExpr(node.cond)
 			println("  cmp $0, %%rax")
-			println("  je  .L.end.%d", c)
+			println("  je %s", node.brkLabel)
 		}
 		a.genStmt(node.then)
 		if node.inc != nil {
 			a.genExpr(node.inc)
 		}
 		println("  jmp .L.begin.%d", c)
-		println(".L.end.%d:", c)
+		println("%s:", node.brkLabel)
 		return
 	case ND_BLOCK:
 		for n := node.body; n != nil; n = n.next {
@@ -797,14 +797,14 @@ func (a RiscV) genStmt(node *Node) {
 		println(".L.begin.%d:", c)
 		if node.cond != nil {
 			a.genExpr(node.cond)
-			println("  beqz a0, .L.end.%d", c)
+			println("  beqz a0, %s", node.brkLabel)
 		}
 		a.genStmt(node.then)
 		if node.inc != nil {
 			a.genExpr(node.inc)
 		}
 		println("  j .L.begin.%d", c)
-		println(".L.end.%d:", c)
+		println("%s:", node.brkLabel)
 		return
 	case ND_BLOCK:
 		for n := node.body; n != nil; n = n.next {

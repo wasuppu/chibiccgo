@@ -17,6 +17,9 @@ var currentParseFn *Obj
 var gotos *Node
 var labels *Node
 
+// Current "goto" jump target.
+var brkLabel string
+
 // Struct member
 type Member struct {
 	next   *Member
@@ -106,6 +109,9 @@ type Node struct {
 	els  *Node
 	init *Node
 	inc  *Node
+
+	// "break" label
+	brkLabel string
 
 	// Block or statement expression
 	body *Node
@@ -658,6 +664,7 @@ func isTypename(tok *Token) bool {
 // | "for" "(" expr-stmt expr? ";" expr? ")" stmt
 // | "while" "(" expr ")" stmt
 // | "goto" ident ";"
+// | "break" ";"
 // | ident ":" stmt
 // | "{" compound-stmt
 // | expr-stmt
@@ -691,6 +698,10 @@ func stmt(rest **Token, tok *Token) *Node {
 
 		enterScope()
 
+		brk := brkLabel
+		node.brkLabel = newUniqueName()
+		brkLabel = node.brkLabel
+
 		if isTypename(tok) {
 			basety := declspec(&tok, tok, nil)
 			node.init = declaration(&tok, tok, basety)
@@ -709,7 +720,9 @@ func stmt(rest **Token, tok *Token) *Node {
 		tok = tok.skip(")")
 
 		node.then = stmt(rest, tok)
+
 		leaveScope()
+		brkLabel = brk
 		return node
 	}
 
@@ -718,7 +731,12 @@ func stmt(rest **Token, tok *Token) *Node {
 		tok = tok.next.skip("(")
 		node.cond = expr(&tok, tok)
 		tok = tok.skip(")")
+
+		brk := brkLabel
+		node.brkLabel = newUniqueName()
+		brkLabel = node.brkLabel
 		node.then = stmt(rest, tok)
+		brkLabel = brk
 		return node
 	}
 
@@ -728,6 +746,16 @@ func stmt(rest **Token, tok *Token) *Node {
 		node.gotoNext = gotos
 		gotos = node
 		*rest = tok.next.next.skip(";")
+		return node
+	}
+
+	if tok.equal("break") {
+		if len(brkLabel) == 0 {
+			failTok(tok, "stray break")
+		}
+		node := NewNode(ND_GOTO, tok)
+		node.uniqueLabel = brkLabel
+		*rest = tok.next.skip(";")
 		return node
 	}
 
