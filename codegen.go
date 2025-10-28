@@ -55,6 +55,21 @@ func (a X64) pop(arg string) {
 	depth--
 }
 
+// Load a value from where %rax is pointing to.
+func (a X64) load(ty *Type) {
+	if ty.kind == TY_ARRAY {
+		return
+	}
+
+	fmt.Printf("  mov (%%rax), %%rax\n")
+}
+
+// Store %rax to an address that the stack top is pointing to.
+func (a X64) store() {
+	a.pop("%rdi")
+	fmt.Printf("  mov %%rax, (%%rdi)\n")
+}
+
 // Compute the absolute address of a given node.
 // It's an error if a given node does not reside in memory.
 func (a X64) genAddr(node *Node) {
@@ -82,11 +97,11 @@ func (a X64) genExpr(node *Node) {
 		return
 	case ND_VAR:
 		a.genAddr(node)
-		fmt.Printf("  mov (%%rax), %%rax\n")
+		a.load(node.ty)
 		return
 	case ND_DEREF:
 		a.genExpr(node.lhs)
-		fmt.Printf("  mov (%%rax), %%rax\n")
+		a.load(node.ty)
 		return
 	case ND_ADDR:
 		a.genAddr(node.lhs)
@@ -95,8 +110,7 @@ func (a X64) genExpr(node *Node) {
 		a.genAddr(node.lhs)
 		a.push()
 		a.genExpr(node.rhs)
-		a.pop("%rdi")
-		fmt.Printf("  mov %%rax, (%%rdi)\n")
+		a.store()
 		return
 	case ND_FUNCALL:
 		nargs := 0
@@ -262,6 +276,21 @@ func (a RiscV) pop(arg string) {
 	depth--
 }
 
+// Load a value from where %rax is pointing to.
+func (a RiscV) load(ty *Type) {
+	if ty.kind == TY_ARRAY {
+		return
+	}
+
+	fmt.Printf("  ld a0, 0(a0)\n")
+}
+
+// Store %rax to an address that the stack top is pointing to.
+func (a RiscV) store() {
+	a.pop("a1")
+	fmt.Printf("  sd a0, 0(a1)\n")
+}
+
 // Compute the absolute address of a given node.
 // It's an error if a given node does not reside in memory.
 func (a RiscV) genAddr(node *Node) {
@@ -289,11 +318,11 @@ func (a RiscV) genExpr(node *Node) {
 		return
 	case ND_VAR:
 		a.genAddr(node)
-		fmt.Printf("  ld a0, 0(a0)\n")
+		a.load(node.ty)
 		return
 	case ND_DEREF:
 		a.genExpr(node.lhs)
-		fmt.Printf("  ld a0, 0(a0)\n")
+		a.load(node.ty)
 		return
 	case ND_ADDR:
 		a.genAddr(node.lhs)
@@ -302,8 +331,7 @@ func (a RiscV) genExpr(node *Node) {
 		a.genAddr(node.lhs)
 		a.push()
 		a.genExpr(node.rhs)
-		a.pop("a1")
-		fmt.Printf("  sd a0, 0(a1)\n")
+		a.store()
 		return
 	case ND_FUNCALL:
 		nargs := 0
@@ -449,7 +477,7 @@ func assignLVarOffsets(prog *Function) {
 	for fn := prog; fn != nil; fn = fn.next {
 		offset := 0
 		for vara := fn.locals; vara != nil; vara = vara.next {
-			offset += 8
+			offset += vara.ty.size
 			vara.offset = -offset
 		}
 		fn.stackSize = alignTo(offset, 16)

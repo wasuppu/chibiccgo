@@ -136,37 +136,53 @@ func getIdent(tok *Token) string {
 	return tok.lexeme
 }
 
+func getNumber(tok *Token) int {
+	if tok.kind != TK_NUM {
+		failTok(tok, "expected a number")
+	}
+	return tok.val
+}
+
 // declspec = "int"
 func declspec(rest **Token, tok *Token) *Type {
 	*rest = tok.skip("int")
 	return tyInt
 }
 
-// type-suffix = ("(" func-params? ")")?
-// func-params = param ("," param)*
+// func-params = (param ("," param)*)? ")"
 // param       = declspec declarator
+func funcParams(rest **Token, tok *Token, ty *Type) *Type {
+	head := Type{}
+	cur := &head
+
+	for !tok.equal(")") {
+		if cur != &head {
+			tok = tok.skip(",")
+		}
+		basety := declspec(&tok, tok)
+		ty := declarator(&tok, tok, basety)
+		cur.next = copyType(ty)
+		cur = cur.next
+	}
+
+	ty = funcType(ty)
+	ty.params = head.next
+	*rest = tok.next
+	return ty
+}
+
+// type-suffix = "(" func-params
+// | "[" num "]"
+// | ε
 func typeSuffix(rest **Token, tok *Token, ty *Type) *Type {
 	if tok.equal("(") {
-		tok = tok.next
+		return funcParams(rest, tok.next, ty)
+	}
 
-		head := Type{}
-		cur := &head
-
-		for !tok.equal(")") {
-			if cur != &head {
-				tok = tok.skip(",")
-			}
-
-			basety := declspec(&tok, tok)
-			ty := declarator(&tok, tok, basety)
-			cur.next = copyType(ty)
-			cur = cur.next
-		}
-
-		ty = funcType(ty)
-		ty.params = head.next
-		*rest = tok.next
-		return ty
+	if tok.equal("[") {
+		sz := getNumber(tok.next)
+		*rest = tok.next.next.skip("]")
+		return arrayOf(ty, sz)
 	}
 
 	*rest = tok
@@ -415,7 +431,7 @@ func newAdd(lhs, rhs *Node, tok *Token) *Node {
 	}
 
 	// ptr + num
-	rhs = NewBinary(ND_MUL, rhs, NewNum(8, tok), tok)
+	rhs = NewBinary(ND_MUL, rhs, NewNum(lhs.ty.base.size, tok), tok)
 	return NewBinary(ND_ADD, lhs, rhs, tok)
 }
 
@@ -431,7 +447,7 @@ func newSub(lhs, rhs *Node, tok *Token) *Node {
 
 	// ptr - num
 	if lhs.ty.base != nil && rhs.ty.isInteger() {
-		rhs = NewBinary(ND_MUL, rhs, NewNum(8, tok), tok)
+		rhs = NewBinary(ND_MUL, rhs, NewNum(lhs.ty.base.size, tok), tok)
 		rhs.addType()
 		node := NewBinary(ND_SUB, lhs, rhs, tok)
 		node.ty = lhs.ty
@@ -442,7 +458,7 @@ func newSub(lhs, rhs *Node, tok *Token) *Node {
 	if lhs.ty.base != nil && rhs.ty.base != nil {
 		node := NewBinary(ND_SUB, lhs, rhs, tok)
 		node.ty = tyInt
-		return NewBinary(ND_DIV, node, NewNum(8, tok), tok)
+		return NewBinary(ND_DIV, node, NewNum(lhs.ty.base.size, tok), tok)
 	}
 
 	failTok(tok, "invalid operands")

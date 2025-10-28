@@ -1,6 +1,6 @@
 package main
 
-var tyInt = &Type{kind: TY_INT}
+var tyInt = &Type{kind: TY_INT, size: 8}
 
 type TypeKind int
 
@@ -8,16 +8,21 @@ const (
 	TY_INT TypeKind = iota
 	TY_PTR
 	TY_FUNC
+	TY_ARRAY
 )
 
 type Type struct {
 	kind TypeKind
+	size int // sizeof() value
 
-	// Pointer
+	// Pointer-to or array-of type.
 	base *Type
 
 	// Declaration
 	name *Token
+
+	// Array
+	arrayLen int
 
 	// Function type
 	returnTy *Type
@@ -38,7 +43,17 @@ func copyType(ty *Type) *Type {
 func pointerTo(base *Type) *Type {
 	return &Type{
 		kind: TY_PTR,
+		size: 8,
 		base: base,
+	}
+}
+
+func arrayOf(base *Type, len int) *Type {
+	return &Type{
+		kind:     TY_ARRAY,
+		size:     base.size * len,
+		base:     base,
+		arrayLen: len,
 	}
 }
 
@@ -67,7 +82,13 @@ func (node *Node) addType() {
 	}
 
 	switch node.kind {
-	case ND_ADD, ND_SUB, ND_MUL, ND_DIV, ND_NEG, ND_ASSIGN:
+	case ND_ADD, ND_SUB, ND_MUL, ND_DIV, ND_NEG:
+		node.ty = node.lhs.ty
+		return
+	case ND_ASSIGN:
+		if node.lhs.ty.kind == TY_ARRAY {
+			failTok(node.lhs.tok, "not an lvalue")
+		}
 		node.ty = node.lhs.ty
 		return
 	case ND_EQ, ND_NE, ND_LT, ND_LE, ND_NUM, ND_FUNCALL:
@@ -77,10 +98,14 @@ func (node *Node) addType() {
 		node.ty = node.vara.ty
 		return
 	case ND_ADDR:
-		node.ty = pointerTo(node.lhs.ty)
+		if node.lhs.ty.kind == TY_ARRAY {
+			node.ty = pointerTo(node.lhs.ty.base)
+		} else {
+			node.ty = pointerTo(node.lhs.ty)
+		}
 		return
 	case ND_DEREF:
-		if node.lhs.ty.kind != TY_PTR {
+		if node.lhs.ty.base == nil {
 			failTok(node.tok, "invalid pointer dereference")
 		}
 		node.ty = node.lhs.ty.base
