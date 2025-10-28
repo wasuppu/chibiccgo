@@ -51,6 +51,11 @@ int main() {
   ASSERT(3, ({ T3 x={1,2,3}; ++x.b; }));
   ASSERT(4, ({ T3 x={1,2,3}; ++x.c; }));
 
+  // c213
+  ASSERT(4, sizeof(struct {int a:3; int c:1; int c:5;}));
+  ASSERT(8, sizeof(struct {int a:3; int:0; int c:5;}));
+  ASSERT(4, sizeof(struct {int a:3; int:0;}));
+
   printf("OK\n");
   return 0;
 }

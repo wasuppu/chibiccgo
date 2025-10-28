@@ -2378,7 +2378,11 @@ func structDecl(rest **Token, tok *Token) *Type {
 	// Assign offsets within the struct to members.
 	bits := 0
 	for mem := ty.members; mem != nil; mem = mem.next {
-		if mem.isBitfield {
+		if mem.isBitfield && mem.bitWidth == 0 {
+			// Zero-width anonymous bitfield has a special meaning.
+			// It affects only alignment.
+			bits = alignTo(bits, mem.ty.size*8)
+		} else if mem.isBitfield {
 			sz := mem.ty.size
 			if bits/(sz*8) != (bits+mem.bitWidth-1)/(sz*8) {
 				bits = alignTo(bits, sz*8)
