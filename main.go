@@ -77,5 +77,7 @@ func main() {
 	prog := parse(tok)
 
 	// Traverse the AST to emit assembly.
-	codegen(optMarch, prog, openFile(optO))
+	out := openFile(optO)
+	fmt.Fprintf(out, ".file 1 \"%s\"\n", inputPath)
+	codegen(optMarch, prog, out)
 }

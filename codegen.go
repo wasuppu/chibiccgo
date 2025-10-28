@@ -106,6 +106,8 @@ func (a X64) genAddr(node *Node) {
 
 // Generate code for a given node.
 func (a X64) genExpr(node *Node) {
+	println("  .loc 1 %d", node.tok.lineno)
+
 	switch node.kind {
 	case ND_NUM:
 		println("  mov $%d, %%rax", node.val)
@@ -194,6 +196,8 @@ func (a X64) genExpr(node *Node) {
 }
 
 func (a X64) genStmt(node *Node) {
+	println("  .loc 1 %d", node.tok.lineno)
+
 	switch node.kind {
 	case ND_IF:
 		c := count()
@@ -354,6 +358,8 @@ func (a RiscV) genAddr(node *Node) {
 
 // Generate code for a given node.
 func (a RiscV) genExpr(node *Node) {
+	println("  .loc 1 %d", node.tok.lineno)
+
 	switch node.kind {
 	case ND_NUM:
 		println("  li a0, %d", node.val)
@@ -441,6 +447,8 @@ func (a RiscV) genExpr(node *Node) {
 }
 
 func (a RiscV) genStmt(node *Node) {
+	println("  .loc 1 %d", node.tok.lineno)
+
 	switch node.kind {
 	case ND_IF:
 		c := count()
