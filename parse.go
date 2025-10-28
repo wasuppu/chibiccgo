@@ -989,12 +989,23 @@ func arrayDesignator(rest **Token, tok *Token, ty *Type) int {
 
 // struct-designator = "." ident
 func structDesignator(rest **Token, tok *Token, ty *Type) *Member {
+	start := tok
 	tok = tok.skip(".")
 	if tok.kind != TK_IDENT {
 		failTok(tok, "expected a field designator")
 	}
 
 	for mem := ty.members; mem != nil; mem = mem.next {
+		// Anonymous struct member
+		if mem.ty.kind == TY_STRUCT && mem.name == nil {
+			if getStructMember(mem.ty, tok) != nil {
+				*rest = start
+				return mem
+			}
+			continue
+		}
+
+		// Regular struct member
 		if mem.name.lexeme == tok.lexeme {
 			*rest = tok.next
 			return mem
