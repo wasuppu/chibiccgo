@@ -22,6 +22,7 @@ var optMarch string
 var basefile string
 var outfile string
 
+var optInclude []string
 var inputPaths []string
 var tmpfiles []string
 var includePaths []string
@@ -34,7 +35,7 @@ func usage(status int) {
 }
 
 func takeArg(arg string) bool {
-	x := []string{"-o", "-I", "-idirafter"}
+	x := []string{"-o", "-I", "-idirafter", "-include"}
 
 	for i := range x {
 		if arg == x[i] {
@@ -173,6 +174,12 @@ func parseArgs(args []string) {
 
 		if strings.HasPrefix(args[i], "-U") {
 			undefMacro(args[i][2:])
+			continue
+		}
+
+		if args[i] == "-include" {
+			i++
+			optInclude = append(optInclude, args[i])
 			continue
 		}
 
@@ -332,12 +339,52 @@ func printTokens(tok *Token) {
 	fmt.Fprintf(out, "\n")
 }
 
-func cc1(target Arch) {
-	// Tokenize and parse.
-	tok := tokenizeFile(basefile)
+func mustTokenizeFile(path string) *Token {
+	tok := tokenizeFile(path)
 	if tok == nil {
-		fail("fail to tokenize %s", basefile)
+		fail("fail to tokenize %s", path)
 	}
+	return tok
+}
+
+func appendTokens(tok1, tok2 *Token) *Token {
+	if tok1 == nil || tok1.kind == TK_EOF {
+		return tok2
+	}
+
+	t := tok1
+	for t.next.kind != TK_EOF {
+		t = t.next
+	}
+	t.next = tok2
+	return tok1
+}
+
+func cc1(target Arch) {
+	var tok *Token = nil
+
+	// Process -include option
+	for i := 0; i < len(optInclude); i++ {
+		incl := optInclude[i]
+
+		var path string
+		if fileExists(incl) {
+			path = incl
+		} else {
+			path = searchIncludePaths(incl)
+			if len(path) == 0 {
+				fail("-include: %s", incl)
+			}
+		}
+
+		tok2 := mustTokenizeFile(path)
+		tok = appendTokens(tok, tok2)
+	}
+
+	// Tokenize and parse.
+	tok2 := mustTokenizeFile(basefile)
+
+	tok = appendTokens(tok, tok2)
 	tok = preprocess(tok)
 
 	// If -E is given, print out preprocessed C code as a result.
