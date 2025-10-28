@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -982,6 +983,16 @@ func counterMacro(tmpl *Token) *Token {
 	return newNumToken(t, tmpl)
 }
 
+func timestampMacro(tmpl *Token) *Token {
+	fileInfo, err := os.Stat(tmpl.file.name)
+	if err != nil {
+		return newStrToken("??? ??? ?? ??:??:?? ????", tmpl)
+	}
+
+	modTime := fileInfo.ModTime()
+	return newStrToken(modTime.Format("Mon Jan _2 15:04:05 2006"), tmpl)
+}
+
 // __DATE__ is expanded to the current date, e.g. "May 17 2020".
 func formatDate(t time.Time) string {
 	months := []string{
@@ -1047,6 +1058,7 @@ func (a X64) initMacro() {
 	addBuiltin("__FILE__", fileMacro)
 	addBuiltin("__LINE__", lineMacro)
 	addBuiltin("__COUNTER__", counterMacro)
+	addBuiltin("__TIMESTAMP__", timestampMacro)
 
 	now := time.Now()
 	defineMacro("__DATE__", formatDate(now))
