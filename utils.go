@@ -77,6 +77,10 @@ func failTok(tok *Token, format string, args ...any) {
 	os.Exit(1)
 }
 
+func warnTok(tok *Token, format string, args ...any) {
+	vfailAt(tok.file.name, tok.file.contents, tok.lineno, tok.loc, format, args...)
+}
+
 func assert(condition bool) {
 	if condition {
 		return

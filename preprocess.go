@@ -6,6 +6,19 @@ func isHash(tok *Token) bool {
 	return tok.atBol && tok.equal("#")
 }
 
+// Some preprocessor directives such as #include allow extraneous
+// tokens before newline. This function skips such tokens.
+func skipLine(tok *Token) *Token {
+	if tok.atBol {
+		return tok
+	}
+	warnTok(tok, "extra token")
+	for tok.atBol {
+		tok = tok.next
+	}
+	return tok
+}
+
 func copyToken(tok *Token) *Token {
 	t := &Token{}
 	*t = *tok
@@ -60,7 +73,8 @@ func preprocess2(tok *Token) *Token {
 			if tok2 == nil {
 				failTok(tok, "fail to tokenize %s", path)
 			}
-			tok = tok2.append(tok.next)
+			tok = skipLine(tok.next)
+			tok = tok2.append(tok)
 			continue
 		}
 
