@@ -62,6 +62,22 @@ func (a X64) genExpr(node *Node) {
 		fmt.Printf("  cqo\n")
 		fmt.Printf("  idiv %%rdi\n")
 		return
+	case ND_EQ, ND_NE, ND_LT, ND_LE:
+		fmt.Printf("  cmp %%rdi, %%rax\n")
+
+		switch node.kind {
+		case ND_EQ:
+			fmt.Printf("  sete %%al\n")
+		case ND_NE:
+			fmt.Printf("  setne %%al\n")
+		case ND_LT:
+			fmt.Printf("  setl %%al\n")
+		case ND_LE:
+			fmt.Printf("  setle %%al\n")
+		}
+
+		fmt.Printf("  movzb %%al, %%rax\n")
+		return
 	}
 
 	fail("invalid expression")
@@ -119,6 +135,23 @@ func (a RiscV) genExpr(node *Node) {
 		return
 	case ND_DIV:
 		fmt.Printf("  div a0, a0, a1\n")
+		return
+	case ND_EQ, ND_NE:
+		fmt.Printf("  xor a0, a0, a1\n")
+
+		if node.kind == ND_EQ {
+			fmt.Printf("  seqz a0, a0\n")
+		} else {
+			fmt.Printf("  snez a0, a0\n")
+		}
+
+		return
+	case ND_LT:
+		fmt.Printf("  slt a0, a0, a1\n")
+		return
+	case ND_LE:
+		fmt.Printf("  slt a0, a1, a0\n")
+		fmt.Printf("  xori a0, a0, 1\n")
 		return
 	}
 

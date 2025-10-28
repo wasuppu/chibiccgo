@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"unicode"
 )
 
@@ -49,6 +50,20 @@ func (tok Token) skip(s string) *Token {
 	return tok.next
 }
 
+// Read a punctuator token from p and returns its length.
+func readPunct(p int) int {
+	if strings.HasPrefix(source[p:], "==") || strings.HasPrefix(source[p:], "!=") ||
+		strings.HasPrefix(source[p:], "<=") || strings.HasPrefix(source[p:], ">=") {
+		return 2
+	}
+
+	if unicode.IsPunct(rune(source[p])) || unicode.IsSymbol(rune(source[p])) {
+		return 1
+	} else {
+		return 0
+	}
+}
+
 // Tokenize `p` and returns new tokens.
 func tokenize() *Token {
 	input := source
@@ -74,10 +89,11 @@ func tokenize() *Token {
 		}
 
 		// Punctuator
-		if unicode.IsPunct(rune(input[p])) || unicode.IsSymbol(rune(input[p])) {
-			cur.next = NewToken(TK_PUNCT, p, 1, input[p:p+1])
+		punctLen := readPunct(p)
+		if punctLen != 0 {
+			cur.next = NewToken(TK_PUNCT, p, punctLen, input[p:p+punctLen])
 			cur = cur.next
-			p++
+			p += cur.len
 			continue
 		}
 

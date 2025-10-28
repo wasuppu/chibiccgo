@@ -9,6 +9,10 @@ const (
 	ND_MUL                 // *
 	ND_DIV                 // /
 	ND_NEG                 // unary -
+	ND_EQ                  // ==
+	ND_NE                  // !=
+	ND_LT                  // <
+	ND_LE                  // <=
 	ND_NUM                 // Integer
 )
 
@@ -48,8 +52,63 @@ func NewNum(val int) *Node {
 	}
 }
 
-// expr = mul ("+" mul | "-" mul)*
+// expr = equality
 func expr(rest **Token, tok *Token) *Node {
+	return equality(rest, tok)
+}
+
+// equality = relational ("==" relational | "!=" relational)*
+func equality(rest **Token, tok *Token) *Node {
+	node := relational(&tok, tok)
+
+	for {
+		if tok.equal("==") {
+			node = NewBinary(ND_EQ, node, relational(&tok, tok.next))
+			continue
+		}
+
+		if tok.equal("!=") {
+			node = NewBinary(ND_NE, node, relational(&tok, tok.next))
+			continue
+		}
+
+		*rest = tok
+		return node
+	}
+}
+
+// relational = add ("<" add | "<=" add | ">" add | ">=" add)*
+func relational(rest **Token, tok *Token) *Node {
+	node := add(&tok, tok)
+
+	for {
+		if tok.equal("<") {
+			node = NewBinary(ND_LT, node, add(&tok, tok.next))
+			continue
+		}
+
+		if tok.equal("<=") {
+			node = NewBinary(ND_LE, node, add(&tok, tok.next))
+			continue
+		}
+
+		if tok.equal(">") {
+			node = NewBinary(ND_LT, add(&tok, tok.next), node)
+			continue
+		}
+
+		if tok.equal(">=") {
+			node = NewBinary(ND_LE, add(&tok, tok.next), node)
+			continue
+		}
+
+		*rest = tok
+		return node
+	}
+}
+
+// add = mul ("+" mul | "-" mul)*
+func add(rest **Token, tok *Token) *Node {
 	node := mul(&tok, tok)
 
 	for {
