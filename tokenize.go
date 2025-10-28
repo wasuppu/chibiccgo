@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/binary"
 	"fmt"
 	"io"
 	"os"
@@ -253,6 +254,51 @@ func readStringLiteral(start, quote int) *Token {
 	} else {
 		tok.str = string(buf)
 	}
+	return tok
+}
+
+// Read a UTF-8-encoded string literal and transcode it in UTF-16.
+//
+// UTF-16 is yet another variable-width encoding for Unicode. Code
+// points smaller than U+10000 are encoded in 2 bytes. Code points
+// equal to or larger than that are encoded in 4 bytes. Each 2 bytes
+// in the 4 byte sequence is called "surrogate", and a 4 byte sequence
+// is called a "surrogate pair".
+func readUtf16StringLiteral(start, quote int) *Token {
+	end := stringLiteralEnd(quote + 1)
+	buf := make([]uint16, end-start)
+	l := 0
+
+	for p := quote + 1; p < end; {
+		if source[p] == '\\' {
+			buf[l] = uint16(readEscapedChar(&p, p+1))
+			l++
+			continue
+		}
+
+		c := decodeUtf8(&p, p)
+		if c < 0x10000 {
+			// Encode a code point in 2 bytes.
+			buf[l] = uint16(c)
+			l++
+		} else {
+			// Encode a code point in 4 bytes.
+			c -= 0x10000
+			buf[l] = uint16(0xd800 + ((c >> 10) & 0x3ff))
+			l++
+			buf[l] = uint16(0xdc00 + (c & 0x3ff))
+			l++
+		}
+	}
+
+	tok := NewToken(TK_STR, start, end+1-start, source[start:end+1])
+	tok.ty = arrayOf(tyUShort, l+1)
+
+	bs := make([]byte, len(buf)*2)
+	for i, v := range buf {
+		binary.LittleEndian.PutUint16(bs[i*2:], v)
+	}
+	tok.str = string(bs)
 	return tok
 }
 
@@ -538,6 +584,14 @@ func tokenize(file *File) *Token {
 		// UTF-8 string literal
 		if strings.HasPrefix(input[p:], "u8\"") {
 			cur.next = readStringLiteral(p, p+2)
+			cur = cur.next
+			p += cur.len
+			continue
+		}
+
+		// UTF-16 string literal
+		if strings.HasPrefix(input[p:], "u\"") {
+			cur.next = readUtf16StringLiteral(p, p+1)
 			cur = cur.next
 			p += cur.len
 			continue
