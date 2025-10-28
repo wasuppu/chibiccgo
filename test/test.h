@@ -15,3 +15,5 @@ void exit(int n);
 int strncmp(char *p, char *q, long n);
 // c204
 int vsprintf(char *buf, char *fmt, void *ap);
+// c205
+int vsprintf();
