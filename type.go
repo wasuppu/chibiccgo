@@ -79,6 +79,7 @@ func copyType(ty *Type) *Type {
 func pointerTo(base *Type) *Type {
 	ty := newType(TY_PTR, 8, 8)
 	ty.base = base
+	ty.isUnsigned = true
 	return ty
 }
 
