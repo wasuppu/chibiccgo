@@ -15,10 +15,11 @@ var currentInputLoc int
 type TokenKind int
 
 const (
-	TK_IDENT TokenKind = iota // Identifiers
-	TK_PUNCT                  // Punctuators
-	TK_NUM                    // Numeric literals
-	TK_EOF                    // End-of-file markers
+	TK_IDENT   TokenKind = iota // Identifiers
+	TK_PUNCT                    // Punctuators
+	TK_KEYWORD                  // Keywords
+	TK_NUM                      // Numeric literals
+	TK_EOF                      // End-of-file markers
 )
 
 // Token type
@@ -78,7 +79,15 @@ func readPunct(p int) int {
 	}
 }
 
-// Tokenize `current_input` and returns new tokens.
+func convertKeywords(tok *Token) {
+	for t := tok; t.kind != TK_EOF; t = t.next {
+		if t.equal("return") {
+			t.kind = TK_KEYWORD
+		}
+	}
+}
+
+// Tokenize a given string and returns new tokens.
 func tokenize(input string) *Token {
 	source = input
 	head := Token{}
@@ -102,7 +111,7 @@ func tokenize(input string) *Token {
 			continue
 		}
 
-		// Identifier
+		// Identifier or keyword
 		if isIdent1(input[p]) {
 			start := p
 			for {
@@ -129,6 +138,7 @@ func tokenize(input string) *Token {
 	}
 
 	cur.next = NewToken(TK_EOF, p, 0, "")
+	convertKeywords(head.next)
 	return head.next
 }
 

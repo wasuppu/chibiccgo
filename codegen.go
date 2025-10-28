@@ -22,7 +22,7 @@ func chooseArch(arch string) Arch {
 type Arch interface {
 	prologue(stackSize int)
 	epilogue()
-	genExpr(node *Node)
+	genStmt(node *Node)
 }
 
 type X64 struct{}
@@ -37,6 +37,7 @@ func (a X64) prologue(stackSize int) {
 }
 
 func (a X64) epilogue() {
+	fmt.Printf(".L.return:\n")
 	fmt.Printf("  mov %%rbp, %%rsp\n")
 	fmt.Printf("  pop %%rbp\n")
 	fmt.Printf("  ret\n")
@@ -126,6 +127,20 @@ func (a X64) genExpr(node *Node) {
 	fail("invalid expression")
 }
 
+func (a X64) genStmt(node *Node) {
+	switch node.kind {
+	case ND_RETURN:
+		a.genExpr(node.lhs)
+		fmt.Printf("  jmp .L.return\n")
+		return
+	case ND_EXPR_STMT:
+		a.genExpr(node.lhs)
+		return
+	}
+
+	fail("invalid statement")
+}
+
 type RiscV struct{}
 
 func (a RiscV) prologue(stackSize int) {
@@ -140,6 +155,7 @@ func (a RiscV) prologue(stackSize int) {
 }
 
 func (a RiscV) epilogue() {
+	fmt.Printf(".L.return:\n")
 	fmt.Printf("  mv sp, fp\n")
 	fmt.Printf("  ld fp, 0(sp)\n")
 	fmt.Printf("  addi sp, sp, 8\n")
@@ -232,9 +248,14 @@ func (a RiscV) genExpr(node *Node) {
 	fail("invalid expression")
 }
 
-func genStmt(target Arch, node *Node) {
-	if node.kind == ND_EXPR_STMT {
-		target.genExpr(node.lhs)
+func (a RiscV) genStmt(node *Node) {
+	switch node.kind {
+	case ND_RETURN:
+		a.genExpr(node.lhs)
+		fmt.Printf("  j .L.return\n")
+		return
+	case ND_EXPR_STMT:
+		a.genExpr(node.lhs)
 		return
 	}
 
@@ -248,7 +269,7 @@ func codegen(arch string, prog *Function) {
 	target.prologue(prog.stackSize)
 
 	for n := prog.body; n != nil; n = n.next {
-		genStmt(target, n)
+		target.genStmt(n)
 		assert(depth == 0)
 	}
 
