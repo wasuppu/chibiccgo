@@ -37,9 +37,10 @@ const (
 
 type Type struct {
 	kind       TypeKind
-	size       int  // sizeof() value
-	align      int  // alignment
-	isUnsigned bool // unsigned or signed
+	size       int   // sizeof() value
+	align      int   // alignment
+	isUnsigned bool  // unsigned or signed
+	origin     *Type // for type compatibility check
 
 	// Pointer-to or array-of type.
 	base *Type
@@ -86,9 +87,59 @@ func (ty Type) isNumeric() bool {
 	return ty.isInteger() || ty.isFlonum()
 }
 
+func isCompatible(t1, t2 *Type) bool {
+	if t1 == t2 {
+		return true
+	}
+
+	if t1.origin != nil {
+		return isCompatible(t1.origin, t2)
+	}
+
+	if t2.origin != nil {
+		return isCompatible(t1, t2.origin)
+	}
+
+	if t1.kind != t2.kind {
+		return false
+	}
+
+	switch t1.kind {
+	case TY_CHAR, TY_SHORT, TY_INT, TY_LONG:
+		return t1.isUnsigned == t2.isUnsigned
+	case TY_FLOAT, TY_DOUBLE:
+		return true
+	case TY_PTR:
+		return isCompatible(t1.base, t2.base)
+	case TY_FUNC:
+		if !isCompatible(t1.returnTy, t2.returnTy) {
+			return false
+		}
+		if t1.isVariadic != t2.isVariadic {
+			return false
+		}
+
+		p1 := t1.params
+		p2 := t2.params
+		for ; p1 != nil && p2 != nil; p1, p2 = p1.next, p2.next {
+			if !isCompatible(p1, p2) {
+				return false
+			}
+		}
+		return p1 == nil && p2 == nil
+	case TY_ARRAY:
+		if !isCompatible(t1.base, t2.base) {
+			return false
+		}
+		return t1.arrayLen < 0 && t2.arrayLen < 0 && t1.arrayLen == t2.arrayLen
+	}
+	return false
+}
+
 func copyType(ty *Type) *Type {
 	ret := Type{}
 	ret = *ty
+	ret.origin = ty
 	return &ret
 }
 

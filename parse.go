@@ -2884,6 +2884,7 @@ func funcall(rest **Token, tok *Token, fn *Node) *Node {
 // | "sizeof" unary
 // | "_Alignof" "(" type-name ")"
 // | "_Alignof" unary
+// | "__builtin_types_compatible_p" "(" type-name, type-name, ")"
 // | "__builtin_reg_class" "(" type-name ")"
 // | ident
 // | str
@@ -2927,6 +2928,19 @@ func primary(rest **Token, tok *Token) *Node {
 		node := unary(rest, tok.next)
 		node.addType()
 		return NewULong(int64(node.ty.align), tok)
+	}
+
+	if tok.equal("__builtin_types_compatible_p") {
+		tok = tok.next.skip("(")
+		t1 := typename(&tok, tok)
+		tok = tok.skip(",")
+		t2 := typename(&tok, tok)
+		*rest = tok.skip(")")
+		if isCompatible(t1, t2) {
+			return NewNum(1, start)
+		} else {
+			return NewNum(0, start)
+		}
 	}
 
 	if ArchName != "riscv" {
