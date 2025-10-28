@@ -459,7 +459,9 @@ const (
 // | "typedef" | "static" | "extern"
 // | "signed" | "unsigned"
 // | struct-decl | union-decl | typedef-name
-// | enum-specifier)+
+// | enum-specifier
+// | "const" | "volatile" | "auto" | "register" | "restrict"
+// | "__restrict" | "__restrict__" | "_Noreturn")+
 func declspec(rest **Token, tok *Token, attr *VarAttr) *Type {
 	ty := tyInt
 	counter := 0
@@ -483,6 +485,14 @@ func declspec(rest **Token, tok *Token, attr *VarAttr) *Type {
 				failTok(tok, "typedef and static may not be used together with static or extern")
 			}
 			tok = tok.next
+			continue
+		}
+
+		// These keywords are recognized but ignored.
+		if consume(&tok, tok, "const") || consume(&tok, tok, "volatile") ||
+			consume(&tok, tok, "auto") || consume(&tok, tok, "register") ||
+			consume(&tok, tok, "restrict") || consume(&tok, tok, "__restrict") ||
+			consume(&tok, tok, "__restrict__") || consume(&tok, tok, "_Noreturn") {
 			continue
 		}
 
@@ -667,11 +677,22 @@ func typeSuffix(rest **Token, tok *Token, ty *Type) *Type {
 	return ty
 }
 
-// declarator = "*"* ("(" ident ")" | "(" declarator ")" | ident) type-suffix
-func declarator(rest **Token, tok *Token, ty *Type) *Type {
+// pointers = ("*" ("const" | "volatile" | "restrict")*)*
+func pointers(rest **Token, tok *Token, ty *Type) *Type {
 	for consume(&tok, tok, "*") {
 		ty = pointerTo(ty)
+		for tok.equal("const") || tok.equal("volatile") || tok.equal("restrict") ||
+			tok.equal("__restrict") || tok.equal("__restrict__") {
+			tok = tok.next
+		}
 	}
+	*rest = tok
+	return ty
+}
+
+// declarator = pointers ("(" ident ")" | "(" declarator ")" | ident) type-suffix
+func declarator(rest **Token, tok *Token, ty *Type) *Type {
+	ty = pointers(&tok, tok, ty)
 
 	if tok.equal("(") {
 		start := tok
@@ -691,12 +712,9 @@ func declarator(rest **Token, tok *Token, ty *Type) *Type {
 	return ty
 }
 
-// abstract-declarator = "*"* ("(" abstract-declarator ")")? type-suffix
+// abstract-declarator = pointers ("(" abstract-declarator ")")? type-suffix
 func abstractDeclarator(rest **Token, tok *Token, ty *Type) *Type {
-	for tok.equal("*") {
-		ty = pointerTo(ty)
-		tok = tok.next
-	}
+	ty = pointers(&tok, tok, ty)
 
 	if tok.equal("(") {
 		start := tok
@@ -1198,6 +1216,8 @@ func gvarInitializer(rest **Token, tok *Token, vara *Obj) {
 var typenames = []string{
 	"void", "_Bool", "char", "short", "int", "long", "struct", "union",
 	"typedef", "enum", "static", "extern", "_Alignas", "signed", "unsigned",
+	"const", "volatile", "auto", "register", "restrict", "__restrict",
+	"__restrict__", "_Noreturn",
 }
 
 // Returns true if a given token represents a type.

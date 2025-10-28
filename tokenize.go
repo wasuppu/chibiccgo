@@ -19,7 +19,8 @@ var kws = []string{
 	"struct", "union", "short", "long", "void", "typedef", "_Bool",
 	"enum", "static", "goto", "break", "continue", "switch", "case",
 	"default", "extern", "_Alignof", "_Alignas", "do", "signed",
-	"unsigned",
+	"unsigned", "const", "volatile", "auto", "register", "restrict",
+	"__restrict", "__restrict__", "_Noreturn",
 }
 
 var puncts = []string{
