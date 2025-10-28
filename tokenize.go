@@ -80,6 +80,16 @@ func isIdent2(c byte) bool {
 	return isIdent1(c) || ('0' <= c && c <= '9')
 }
 
+func fromHex(c byte) byte {
+	if '0' <= c && c <= '9' {
+		return c - '0'
+	}
+	if 'a' <= c && c <= 'f' {
+		return c - 'a' + 10
+	}
+	return c - 'A' + 10
+}
+
 // Read a punctuator token from p and returns its length.
 func readPunct(p int) int {
 	if strings.HasPrefix(source[p:], "==") || strings.HasPrefix(source[p:], "!=") ||
@@ -110,6 +120,21 @@ func readEscapedChar(newPos *int, p int) byte {
 				c = (c << 3) + (source[p] - '0')
 				p++
 			}
+		}
+		*newPos = p
+		return c
+	}
+
+	if source[p] == 'x' {
+		// Read a hexadecimal number.
+		p++
+		if !isXDigit(source[p]) {
+			failAt(p, "invalid hex escape sequence")
+		}
+
+		c := byte(0)
+		for ; isXDigit(source[p]); p++ {
+			c = (c << 4) + fromHex(source[p])
 		}
 		*newPos = p
 		return c
@@ -259,4 +284,10 @@ func parseNumber(s string, pos int) (int, int) {
 		os.Exit(1)
 	}
 	return num, pos
+}
+
+func isXDigit(c byte) bool {
+	return (c >= '0' && c <= '9') ||
+		(c >= 'a' && c <= 'f') ||
+		(c >= 'A' && c <= 'F')
 }
