@@ -854,7 +854,7 @@ func preprocess2(tok *Token) *Token {
 			filename := readIncludeFilename(&tok, tok.next, &isDquote)
 
 			if filename[0] != '/' && isDquote {
-				path := filepath.Join(filepath.Dir(start.file.name), filename)
+				path := fmt.Sprintf("%s/%s", filepath.Dir(start.file.name), filename)
 				if fileExists(path) {
 					tok = includeFile(tok, path, start.next.next)
 					continue

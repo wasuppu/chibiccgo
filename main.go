@@ -25,6 +25,7 @@ var optX FileType
 var optFcommon bool = true
 var optE bool
 var optM bool
+var optMD bool
 var optMP bool
 var optS bool
 var optC bool
@@ -270,6 +271,11 @@ func parseArgs(args []string) {
 			continue
 		}
 
+		if args[i] == "-MD" {
+			optMD = true
+			continue
+		}
+
 		if args[i] == "-cc1-input" {
 			i++
 			basefile = args[i]
@@ -443,6 +449,12 @@ func printDependencies() {
 	var path string
 	if len(optMF) > 0 {
 		path = optMF
+	} else if optMD {
+		if len(optO) > 0 {
+			path = replaceExtn(optO, ".d")
+		} else {
+			path = replaceExtn(basefile, ".d")
+		}
 	} else if len(optO) > 0 {
 		path = optO
 	} else {
@@ -519,10 +531,12 @@ func cc1(target Arch) {
 	tok = appendTokens(tok, tok2)
 	tok = preprocess(tok)
 
-	// If -M is given, print file dependencies.
-	if optM {
+	// If -M or -MD are given, print file dependencies.
+	if optM || optMD {
 		printDependencies()
-		return
+		if optM {
+			return
+		}
 	}
 
 	// If -E is given, print out preprocessed C code as a result.
