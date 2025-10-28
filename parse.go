@@ -21,6 +21,10 @@ var labels *Node
 var brkLabel string
 var contLabel string
 
+// Points to a node representing a switch if we are parsing
+// a switch statement. Otherwise, NULL.
+var currentSwitch *Node
+
 // Struct member
 type Member struct {
 	next   *Member
@@ -83,6 +87,8 @@ const (
 	ND_RETURN                    // "return"
 	ND_IF                        // "if"
 	ND_FOR                       // "for"
+	ND_SWITCH                    // "switch"
+	ND_CASE                      // "case"
 	ND_BLOCK                     // { ... }
 	ND_GOTO                      // "goto"
 	ND_LABEL                     // Labeled statement
@@ -131,8 +137,15 @@ type Node struct {
 	uniqueLabel string
 	gotoNext    *Node
 
-	vara *Obj  // Used if kind == ND_VAR
-	val  int64 // Used if kind == ND_NUM
+	// Switch-cases
+	caseNext    *Node
+	defaultCase *Node
+
+	// Variable
+	vara *Obj
+
+	// Numeric literal
+	val int64
 }
 
 // Scope for local variables, global variables, typedefs
@@ -663,6 +676,9 @@ func isTypename(tok *Token) bool {
 
 // stmt = "return" expr ";"
 // | "if" "(" expr ")" stmt ("else" stmt)?
+// | "switch" "(" expr ")" stmt
+// | "case" num ":" stmt
+// | "default" ":" stmt
 // | "for" "(" expr-stmt expr? ";" expr? ")" stmt
 // | "while" "(" expr ")" stmt
 // | "goto" ident ";"
@@ -692,6 +708,55 @@ func stmt(rest **Token, tok *Token) *Node {
 			node.els = stmt(&tok, tok.next)
 		}
 		*rest = tok
+		return node
+	}
+
+	if tok.equal("switch") {
+		node := NewNode(ND_SWITCH, tok)
+		tok = tok.next.skip("(")
+		node.cond = expr(&tok, tok)
+		tok = tok.skip(")")
+
+		sw := currentSwitch
+		currentSwitch = node
+
+		brk := brkLabel
+		node.brkLabel = newUniqueName()
+		brkLabel = node.brkLabel
+
+		node.then = stmt(rest, tok)
+
+		currentSwitch = sw
+		brkLabel = brk
+		return node
+	}
+
+	if tok.equal("case") {
+		if currentSwitch == nil {
+			failTok(tok, "stray case")
+		}
+		val := int32(getNumber(tok.next))
+
+		node := NewNode(ND_CASE, tok)
+		tok = tok.next.next.skip(":")
+		node.label = newUniqueName()
+		node.lhs = stmt(rest, tok)
+		node.val = int64(val)
+		node.caseNext = currentSwitch.caseNext
+		currentSwitch.caseNext = node
+		return node
+	}
+
+	if tok.equal("default") {
+		if currentSwitch == nil {
+			failTok(tok, "stray default")
+		}
+
+		node := NewNode(ND_CASE, tok)
+		tok = tok.next.skip(":")
+		node.label = newUniqueName()
+		node.lhs = stmt(rest, tok)
+		currentSwitch.defaultCase = node
 		return node
 	}
 

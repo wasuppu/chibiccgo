@@ -423,6 +423,32 @@ func (a X64) genStmt(node *Node) {
 		println("  jmp .L.begin.%d", c)
 		println("%s:", node.brkLabel)
 		return
+	case ND_SWITCH:
+		a.genExpr(node.cond)
+
+		for n := node.caseNext; n != nil; n = n.caseNext {
+			var reg string
+			if node.cond.ty.size == 8 {
+				reg = "%rax"
+			} else {
+				reg = "%eax"
+			}
+			println("  cmp $%d, %s", n.val, reg)
+			println("  je %s", n.label)
+		}
+
+		if node.defaultCase != nil {
+			println("  jmp %s", node.defaultCase.label)
+		}
+
+		println("  jmp %s", node.brkLabel)
+		a.genStmt(node.then)
+		println("%s:", node.brkLabel)
+		return
+	case ND_CASE:
+		println("%s:", node.label)
+		a.genStmt(node.lhs)
+		return
 	case ND_BLOCK:
 		for n := node.body; n != nil; n = n.next {
 			a.genStmt(n)
@@ -807,6 +833,26 @@ func (a RiscV) genStmt(node *Node) {
 		}
 		println("  j .L.begin.%d", c)
 		println("%s:", node.brkLabel)
+		return
+	case ND_SWITCH:
+		a.genExpr(node.cond)
+
+		for n := node.caseNext; n != nil; n = n.caseNext {
+			println("  li t0, %d", n.val)
+			println("  beq a0, t0, %s", n.label)
+		}
+
+		if node.defaultCase != nil {
+			println("  j %s", node.defaultCase.label)
+		}
+
+		println("  j %s", node.brkLabel)
+		a.genStmt(node.then)
+		println("%s:", node.brkLabel)
+		return
+	case ND_CASE:
+		println("%s:", node.label)
+		a.genStmt(node.lhs)
 		return
 	case ND_BLOCK:
 		for n := node.body; n != nil; n = n.next {
