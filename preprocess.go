@@ -967,6 +967,16 @@ func preprocess2(tok *Token) *Token {
 			continue
 		}
 
+		if tok.equal("pragma") {
+			for {
+				tok = tok.next
+				if tok.atBol {
+					break
+				}
+			}
+			continue
+		}
+
 		if tok.equal("error") {
 			failTok(tok, "error")
 		}
