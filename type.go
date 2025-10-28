@@ -44,9 +44,10 @@ type Type struct {
 	isFlexible bool
 
 	// Function type
-	returnTy *Type
-	params   *Type
-	next     *Type
+	returnTy   *Type
+	params     *Type
+	isVariadic bool
+	next       *Type
 }
 
 func newType(kind TypeKind, size int, align int) *Type {

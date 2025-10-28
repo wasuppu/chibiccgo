@@ -555,7 +555,7 @@ func declspec(rest **Token, tok *Token, attr *VarAttr) *Type {
 	return ty
 }
 
-// func-params = ("void" | param ("," param)*?)? ")"
+// func-params = ("void" | param ("," param)* ("," "...")?)? ")"
 // param       = declspec declarator
 func funcParams(rest **Token, tok *Token, ty *Type) *Type {
 	if tok.equal("void") && tok.next.equal(")") {
@@ -565,10 +565,18 @@ func funcParams(rest **Token, tok *Token, ty *Type) *Type {
 
 	head := Type{}
 	cur := &head
+	isVariadic := false
 
 	for !tok.equal(")") {
 		if cur != &head {
 			tok = tok.skip(",")
+		}
+
+		if tok.equal("...") {
+			isVariadic = true
+			tok = tok.next
+			tok.skip(")")
+			break
 		}
 
 		ty2 := declspec(&tok, tok, nil)
@@ -588,6 +596,7 @@ func funcParams(rest **Token, tok *Token, ty *Type) *Type {
 
 	ty = funcType(ty)
 	ty.params = head.next
+	ty.isVariadic = isVariadic
 	*rest = tok.next
 	return ty
 }
