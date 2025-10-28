@@ -144,7 +144,9 @@ func (a X64) genStmt(node *Node) {
 		return
 	case ND_FOR:
 		c := count()
-		a.genStmt(node.init)
+		if node.init != nil {
+			a.genStmt(node.init)
+		}
 		fmt.Printf(".L.begin.%d:\n", c)
 		if node.cond != nil {
 			a.genExpr(node.cond)
@@ -298,7 +300,9 @@ func (a RiscV) genStmt(node *Node) {
 		return
 	case ND_FOR:
 		c := count()
-		a.genStmt(node.init)
+		if node.init != nil {
+			a.genStmt(node.init)
+		}
 		fmt.Printf(".L.begin.%d:\n", c)
 		if node.cond != nil {
 			a.genExpr(node.cond)

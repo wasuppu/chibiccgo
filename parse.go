@@ -115,6 +115,7 @@ func NewLVar(name string) *Obj {
 // stmt = "return" expr ";"
 // | "if" "(" expr ")" stmt ("else" stmt)?
 // | "for" "(" expr-stmt expr? ";" expr? ")" stmt
+// | "while" "(" expr ")" stmt
 // | "{" compound-stmt
 // | expr-stmt
 func stmt(rest **Token, tok *Token) *Node {
@@ -153,6 +154,15 @@ func stmt(rest **Token, tok *Token) *Node {
 		}
 		tok = tok.skip(")")
 
+		node.then = stmt(rest, tok)
+		return node
+	}
+
+	if tok.equal("while") {
+		node := NewNode(ND_FOR)
+		tok = tok.next.skip("(")
+		node.cond = expr(&tok, tok)
+		tok = tok.skip(")")
 		node.then = stmt(rest, tok)
 		return node
 	}
