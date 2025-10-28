@@ -8,6 +8,7 @@ riscv: chibicc
 	./test.sh "riscv"
 
 test: x64 riscv
+	./test-driver.sh
 
 clean:
 	rm -f chibicc *.o *~ tmp*

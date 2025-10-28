@@ -5,6 +5,7 @@ import (
 	"os"
 )
 
+var outputFile *os.File
 var depth int
 var currentGenFn *Obj
 
@@ -537,7 +538,8 @@ func emitData(prog *Obj) {
 	}
 }
 
-func codegen(arch string, prog *Obj) {
+func codegen(arch string, prog *Obj, out *os.File) {
+	outputFile = out
 	assignLVarOffsets(prog)
 	emitData(prog)
 
@@ -575,5 +577,5 @@ func count() int {
 }
 
 func println(format string, args ...any) {
-	fmt.Fprintf(os.Stdout, format+"\n", args...)
+	fmt.Fprintf(outputFile, format+"\n", args...)
 }
