@@ -24,9 +24,7 @@ func chooseArch(arch string) Arch {
 }
 
 type Arch interface {
-	prologue(fname string, stackSize int)
-	epilogue(fname string)
-	genStmt(node *Node)
+	genCode(prog *Function)
 }
 
 type X64 struct{}
@@ -205,6 +203,28 @@ func (a X64) genStmt(node *Node) {
 	}
 
 	failTok(node.tok, "invalid statement")
+}
+
+func (a X64) genCode(prog *Function) {
+	for fn := prog; fn != nil; fn = fn.next {
+		// Prologue
+		a.prologue(fn.name, fn.stackSize)
+		currentGenFn = fn
+
+		// Save passed-by-register arguments to the stack
+		i := 0
+		for vara := fn.params; vara != nil; vara = vara.next {
+			fmt.Printf("  mov %s, %d(%%rbp)\n", x64ArgReg[i], vara.offset)
+			i++
+		}
+
+		// Emit code
+		a.genStmt(fn.body)
+		assert(depth == 0)
+
+		// Epilogue
+		a.epilogue(fn.name)
+	}
 }
 
 type RiscV struct{}
@@ -389,23 +409,33 @@ func (a RiscV) genStmt(node *Node) {
 	failTok(node.tok, "invalid statement")
 }
 
+func (a RiscV) genCode(prog *Function) {
+	for fn := prog; fn != nil; fn = fn.next {
+		// Prologue
+		a.prologue(fn.name, fn.stackSize)
+		currentGenFn = fn
+
+		// Save passed-by-register arguments to the stack
+		i := 0
+		for vara := fn.params; vara != nil; vara = vara.next {
+			fmt.Printf("  sd %s, %d(fp)\n", argRegR[i], vara.offset)
+			i++
+		}
+
+		// Emit code
+		a.genStmt(fn.body)
+		assert(depth == 0)
+
+		// Epilogue
+		a.epilogue(fn.name)
+	}
+}
+
 func codegen(arch string, prog *Function) {
 	assignLVarOffsets(prog)
 
 	target := chooseArch(arch)
-	for fn := prog; fn != nil; fn = fn.next {
-		// Prologue
-		target.prologue(fn.name, fn.stackSize)
-		currentGenFn = fn
-
-		// Emit code
-		target.genStmt(fn.body)
-		assert(depth == 0)
-
-		// Epilogue
-		target.epilogue(fn.name)
-	}
-
+	target.genCode(prog)
 }
 
 // Round up `n` to the nearest multiple of `align`. For instance,

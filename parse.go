@@ -16,6 +16,7 @@ type Obj struct {
 type Function struct {
 	next      *Function
 	name      string
+	params    *Obj
 	body      *Node
 	locals    *Obj
 	stackSize int
@@ -141,12 +142,33 @@ func declspec(rest **Token, tok *Token) *Type {
 	return tyInt
 }
 
-// type-suffix = ("(" func-params)?
+// type-suffix = ("(" func-params? ")")?
+// func-params = param ("," param)*
+// param       = declspec declarator
 func typeSuffix(rest **Token, tok *Token, ty *Type) *Type {
 	if tok.equal("(") {
-		*rest = tok.next.skip(")")
-		return funcType(ty)
+		tok = tok.next
+
+		head := Type{}
+		cur := &head
+
+		for !tok.equal(")") {
+			if cur != &head {
+				tok = tok.skip(",")
+			}
+
+			basety := declspec(&tok, tok)
+			ty := declarator(&tok, tok, basety)
+			cur.next = copyType(ty)
+			cur = cur.next
+		}
+
+		ty = funcType(ty)
+		ty.params = head.next
+		*rest = tok.next
+		return ty
 	}
+
 	*rest = tok
 	return ty
 }
@@ -550,6 +572,13 @@ func primary(rest **Token, tok *Token) *Node {
 	return nil
 }
 
+func createParamLvars(param *Type) {
+	if param != nil {
+		createParamLvars(param.next)
+		NewLVar(getIdent(param.name), param)
+	}
+}
+
 func function(rest **Token, tok *Token) *Function {
 	ty := declspec(&tok, tok)
 	ty = declarator(&tok, tok, ty)
@@ -557,6 +586,8 @@ func function(rest **Token, tok *Token) *Function {
 	locals = nil
 
 	fn := &Function{name: getIdent(ty.name)}
+	createParamLvars(ty.params)
+	fn.params = locals
 
 	tok = tok.skip("{")
 	fn.body = compoundStmt(rest, tok)
