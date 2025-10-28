@@ -78,6 +78,23 @@ func arrayOf(base *Type, len int) *Type {
 	return ty
 }
 
+func getCommonType(ty1, ty2 *Type) *Type {
+	if ty1.base != nil {
+		return pointerTo(ty1.base)
+	}
+	if ty1.size == 8 || ty2.size == 8 {
+		return tyLong
+	}
+	return tyInt
+}
+
+// This operation is called the "usual arithmetic conversion".
+func usualArithConv(lhs, rhs **Node) {
+	ty := getCommonType((*lhs).ty, (*rhs).ty)
+	*lhs = NewCast(*lhs, ty)
+	*rhs = NewCast(*rhs, ty)
+}
+
 func funcType(returnTy *Type) *Type {
 	return &Type{kind: TY_FUNC, returnTy: returnTy}
 }
@@ -103,16 +120,37 @@ func (node *Node) addType() {
 	}
 
 	switch node.kind {
-	case ND_ADD, ND_SUB, ND_MUL, ND_DIV, ND_NEG:
+	case ND_NUM:
+		if node.val == int64(int32(node.val)) {
+			node.ty = tyInt
+		} else {
+			node.ty = tyLong
+		}
+		return
+		return
+	case ND_ADD, ND_SUB, ND_MUL, ND_DIV:
+		usualArithConv(&node.lhs, &node.rhs)
 		node.ty = node.lhs.ty
+		return
+	case ND_NEG:
+		ty := getCommonType(tyInt, node.lhs.ty)
+		node.lhs = NewCast(node.lhs, ty)
+		node.ty = ty
 		return
 	case ND_ASSIGN:
 		if node.lhs.ty.kind == TY_ARRAY {
 			failTok(node.lhs.tok, "not an lvalue")
 		}
+		if node.lhs.ty.kind != TY_STRUCT {
+			node.rhs = NewCast(node.rhs, node.lhs.ty)
+		}
 		node.ty = node.lhs.ty
 		return
-	case ND_EQ, ND_NE, ND_LT, ND_LE, ND_NUM, ND_FUNCALL:
+	case ND_EQ, ND_NE, ND_LT, ND_LE:
+		usualArithConv(&node.lhs, &node.rhs)
+		node.ty = tyInt
+		return
+	case ND_FUNCALL:
 		node.ty = tyLong
 		return
 	case ND_VAR:
