@@ -456,6 +456,16 @@ func (a X64) genStmt(node *Node) {
 		println("  jmp .L.begin.%d", c)
 		println("%s:", node.brkLabel)
 		return
+	case ND_DO:
+		c := count()
+		println(".L.begin.%d:", c)
+		a.genStmt(node.then)
+		println("%s:", node.contLabel)
+		a.genExpr(node.cond)
+		println("  cmp $0, %%rax")
+		println("  jne .L.begin.%d", c)
+		println("%s:", node.brkLabel)
+		return
 	case ND_SWITCH:
 		a.genExpr(node.cond)
 
@@ -928,6 +938,15 @@ func (a RiscV) genStmt(node *Node) {
 			a.genExpr(node.inc)
 		}
 		println("  j .L.begin.%d", c)
+		println("%s:", node.brkLabel)
+		return
+	case ND_DO:
+		c := count()
+		println(".L.begin.%d:", c)
+		a.genStmt(node.then)
+		println("%s:", node.contLabel)
+		a.genExpr(node.cond)
+		println("  bnez a0, .L.begin.%d", c)
 		println("%s:", node.brkLabel)
 		return
 	case ND_SWITCH:

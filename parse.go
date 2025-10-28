@@ -134,6 +134,7 @@ const (
 	ND_RETURN                    // "return"
 	ND_IF                        // "if"
 	ND_FOR                       // "for"
+	ND_DO                        // "do"
 	ND_SWITCH                    // "switch"
 	ND_CASE                      // "case"
 	ND_BLOCK                     // { ... }
@@ -1170,6 +1171,7 @@ func isTypename(tok *Token) bool {
 // | "default" ":" stmt
 // | "for" "(" expr-stmt expr? ";" expr? ")" stmt
 // | "while" "(" expr ")" stmt
+// | "do" stmt "while" "(" expr ")" ";"
 // | "goto" ident ";"
 // | "break" ";"
 // | "continue" ";"
@@ -1308,6 +1310,29 @@ func stmt(rest **Token, tok *Token) *Node {
 
 		brkLabel = brk
 		contLabel = cont
+		return node
+	}
+
+	if tok.equal("do") {
+		node := NewNode(ND_DO, tok)
+
+		brk := brkLabel
+		cont := contLabel
+		node.brkLabel = newUniqueName()
+		brkLabel = node.brkLabel
+		node.contLabel = newUniqueName()
+		contLabel = node.contLabel
+
+		node.then = stmt(&tok, tok.next)
+
+		brkLabel = brk
+		contLabel = cont
+
+		tok = tok.skip("while")
+		tok = tok.skip("(")
+		node.cond = expr(&tok, tok)
+		tok = tok.skip(")")
+		*rest = tok.skip(";")
 		return node
 	}
 
