@@ -316,7 +316,9 @@ func declspec(rest **Token, tok *Token) *Type {
 			ty = tyShort
 		case INT:
 			ty = tyInt
-		case LONG, LONG + INT:
+		case LONG, LONG + INT,
+			LONG + LONG,
+			LONG + LONG + INT:
 			ty = tyLong
 		default:
 			failTok(tok, "invalid type")
