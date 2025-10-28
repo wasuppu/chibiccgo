@@ -530,9 +530,14 @@ func declspec(rest **Token, tok *Token, attr *VarAttr) *Type {
 	return ty
 }
 
-// func-params = (param ("," param)*)? ")"
+// func-params = ("void" | param ("," param)*)? ")"
 // param       = declspec declarator
 func funcParams(rest **Token, tok *Token, ty *Type) *Type {
+	if tok.equal("void") && tok.next.equal(")") {
+		*rest = tok.next.next
+		return funcType(ty)
+	}
+
 	head := Type{}
 	cur := &head
 
