@@ -1339,6 +1339,16 @@ func compoundStmt(rest **Token, tok *Token) *Node {
 				continue
 			}
 
+			if isFunction(tok) {
+				tok = function(tok, basety, &attr)
+				continue
+			}
+
+			if attr.isExtern {
+				tok = globalVariable(tok, basety, &attr)
+				continue
+			}
+
 			cur.next = declaration(&tok, tok, basety)
 			cur = cur.next
 		} else {
