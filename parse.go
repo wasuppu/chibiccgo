@@ -124,7 +124,7 @@ type Obj struct {
 type Relocation struct {
 	next   *Relocation
 	offset int
-	label  string
+	label  *string
 	addend int64
 }
 
@@ -1630,10 +1630,10 @@ func writeGVarData(cur *Relocation, init *Initializer, ty *Type, buf []byte, off
 		return cur
 	}
 
-	var label string
+	var label *string
 	val := uint64(eval2(init.expr, &label))
 
-	if len(label) == 0 {
+	if label == nil {
 		writeBuf(buf[offset:], val, ty.size)
 		return cur
 	}
@@ -2013,7 +2013,7 @@ func expr(rest **Token, tok *Token) *Node {
 
 // Evaluate a given node as a constant expression.
 func eval(node *Node) int64 {
-	var label string
+	var label *string
 	return eval2(node, &label)
 }
 
@@ -2023,7 +2023,7 @@ func eval(node *Node) int64 {
 // is a pointer to a global variable and n is a postiive/negative
 // number. The latter form is accepted only as an initialization
 // expression for a global variable.
-func eval2(node *Node, label *string) int64 {
+func eval2(node *Node, label **string) int64 {
 	node.addType()
 
 	if node.ty.isFlonum() {
@@ -2155,8 +2155,11 @@ func eval2(node *Node, label *string) int64 {
 		return val
 	case ND_ADDR:
 		return evalRVal(node.lhs, label)
+	case ND_LABEL_VAL:
+		*label = &node.uniqueLabel
+		return 0
 	case ND_MEMBER:
-		if len(*label) != 0 {
+		if label == nil {
 			failTok(node.tok, "not a compile-time constant ndmember")
 		}
 		if node.ty.kind != TY_ARRAY {
@@ -2164,13 +2167,13 @@ func eval2(node *Node, label *string) int64 {
 		}
 		return evalRVal(node.lhs, label) + int64(node.member.offset)
 	case ND_VAR:
-		if len(*label) != 0 {
+		if label == nil {
 			failTok(node.tok, "not a compile-time constant ndvar")
 		}
 		if node.vara.ty.kind != TY_ARRAY && node.vara.ty.kind != TY_FUNC {
 			failTok(node.tok, "invalid initializer")
 		}
-		*label = node.vara.name
+		*label = &node.vara.name
 		return 0
 	case ND_NUM:
 		return node.val
@@ -2180,13 +2183,13 @@ func eval2(node *Node, label *string) int64 {
 	return -1
 }
 
-func evalRVal(node *Node, label *string) int64 {
+func evalRVal(node *Node, label **string) int64 {
 	switch node.kind {
 	case ND_VAR:
 		if node.vara.isLocal {
 			failTok(node.tok, "not a compile-time constant evalrel")
 		}
-		*label = node.vara.name
+		*label = &node.vara.name
 		return 0
 	case ND_DEREF:
 		return eval2(node.lhs, label)

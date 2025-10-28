@@ -1550,7 +1550,7 @@ func (a X64) emitData(prog *Obj) {
 			pos := 0
 			for pos < vara.ty.size {
 				if rel != nil && rel.offset == pos {
-					println("  .quad %s%+d", rel.label, rel.addend)
+					println("  .quad %s%+d", *rel.label, rel.addend)
 					rel = rel.next
 					pos += 8
 				} else {
