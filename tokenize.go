@@ -29,7 +29,7 @@ var kws = []string{
 	"default", "extern", "_Alignof", "_Alignas", "do", "signed",
 	"unsigned", "const", "volatile", "auto", "register", "restrict",
 	"__restrict", "__restrict__", "_Noreturn", "float", "double",
-	"typeof",
+	"typeof", "asm",
 }
 
 var puncts = []string{

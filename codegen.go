@@ -1224,6 +1224,9 @@ func (a X64) genStmt(node *Node) {
 	case ND_EXPR_STMT:
 		a.genExpr(node.lhs)
 		return
+	case ND_ASM:
+		println("  %s", node.asmStr)
+		return
 	}
 
 	failTok(node.tok, "invalid statement")

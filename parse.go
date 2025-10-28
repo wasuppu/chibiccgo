@@ -163,6 +163,7 @@ const (
 	ND_NUM                       // Integer
 	ND_CAST                      // Type cast
 	ND_MEMZERO                   // Zero-clear a stack variable
+	ND_ASM                       // "asm"
 )
 
 // AST node type
@@ -206,6 +207,9 @@ type Node struct {
 	// Switch-cases
 	caseNext    *Node
 	defaultCase *Node
+
+	// "asm" string literal
+	asmStr string
 
 	// Variable
 	vara *Obj
@@ -1537,6 +1541,24 @@ func isTypename(tok *Token) bool {
 	return findTypedef(tok) != nil
 }
 
+// asm-stmt = "asm" ("volatile" | "inline")* "(" string-literal ")"
+func asmStmt(rest **Token, tok *Token) *Node {
+	node := NewNode(ND_ASM, tok)
+	tok = tok.next
+
+	for tok.equal("volatile") || tok.equal("inline") {
+		tok = tok.next
+	}
+
+	tok = tok.skip("(")
+	if tok.kind != TK_STR || tok.ty.base.kind != TY_CHAR {
+		failTok(tok, "expected string literal")
+	}
+	node.asmStr = tok.str
+	*rest = tok.next.skip(")")
+	return node
+}
+
 // stmt = "return" expr? ";"
 // | "if" "(" expr ")" stmt ("else" stmt)?
 // | "switch" "(" expr ")" stmt
@@ -1545,6 +1567,7 @@ func isTypename(tok *Token) bool {
 // | "for" "(" expr-stmt expr? ";" expr? ")" stmt
 // | "while" "(" expr ")" stmt
 // | "do" stmt "while" "(" expr ")" ";"
+// | "asm" asm-stmt
 // | "goto" ident ";"
 // | "break" ";"
 // | "continue" ";"
@@ -1711,6 +1734,10 @@ func stmt(rest **Token, tok *Token) *Node {
 		tok = tok.skip(")")
 		*rest = tok.skip(";")
 		return node
+	}
+
+	if tok.equal("asm") {
+		return asmStmt(rest, tok)
 	}
 
 	if tok.equal("goto") {
