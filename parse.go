@@ -393,6 +393,7 @@ func NewLVar(name string, ty *Type) *Obj {
 func NewGVar(name string, ty *Type) *Obj {
 	vara := NewVar(name, ty)
 	vara.next = globals
+	vara.isStatic = true
 	vara.isDefinition = true
 	globals = vara
 	return vara
@@ -2422,6 +2423,7 @@ func globalVariable(tok *Token, basety *Type, attr *VarAttr) *Token {
 		ty := declarator(&tok, tok, basety)
 		vara := NewGVar(getIdent(ty.name), ty)
 		vara.isDefinition = !attr.isExtern
+		vara.isStatic = attr.isStatic
 		if attr.align != 0 {
 			vara.align = attr.align
 		}

@@ -540,7 +540,11 @@ func (a X64) emitData(prog *Obj) {
 			continue
 		}
 
-		println("  .globl %s", vara.name)
+		if vara.isStatic {
+			println("  .local %s", vara.name)
+		} else {
+			println("  .globl %s", vara.name)
+		}
 		println("  .align %d", vara.align)
 
 		if len(vara.initData) > 0 {
@@ -1004,7 +1008,12 @@ func (a RiscV) emitData(prog *Obj) {
 			continue
 		}
 
-		println("  .globl %s", vara.name)
+		if vara.isStatic {
+			println("  .local %s", vara.name)
+		} else {
+			println("  .globl %s", vara.name)
+		}
+
 		if vara.align == 0 {
 			fail("align can not be 0!")
 		}
