@@ -408,6 +408,22 @@ func (a X64) genExpr(node *Node) {
 		return
 	case ND_NEG:
 		a.genExpr(node.lhs)
+
+		switch node.ty.kind {
+		case TY_FLOAT:
+			println("  mov $1, %%rax")
+			println("  shl $31, %%rax")
+			println("  movq %%rax, %%xmm1")
+			println("  xorps %%xmm1, %%xmm0")
+			return
+		case TY_DOUBLE:
+			println("  mov $1, %%rax")
+			println("  shl $63, %%rax")
+			println("  movq %%rax, %%xmm1")
+			println("  xorpd %%xmm1, %%xmm0")
+			return
+		}
+
 		println("  neg %%rax")
 		return
 	case ND_VAR, ND_MEMBER:
@@ -557,6 +573,18 @@ func (a X64) genExpr(node *Node) {
 		}
 
 		switch node.kind {
+		case ND_ADD:
+			println("  add%s %%xmm1, %%xmm0", sz)
+			return
+		case ND_SUB:
+			println("  sub%s %%xmm1, %%xmm0", sz)
+			return
+		case ND_MUL:
+			println("  mul%s %%xmm1, %%xmm0", sz)
+			return
+		case ND_DIV:
+			println("  div%s %%xmm1, %%xmm0", sz)
+			return
 		case ND_EQ, ND_NE, ND_LT, ND_LE:
 			println("  ucomi%s %%xmm0, %%xmm1", sz)
 
@@ -627,13 +655,13 @@ func (a X64) genExpr(node *Node) {
 		}
 		return
 	case ND_BITAND:
-		println("  and %%rdi, %%rax")
+		println("  and %s, %s", di, ax)
 		return
 	case ND_BITOR:
-		println("  or %%rdi, %%rax")
+		println("  or %s, %s", di, ax)
 		return
 	case ND_BITXOR:
-		println("  xor %%rdi, %%rax")
+		println("  xor %s, %s", di, ax)
 		return
 	case ND_EQ, ND_NE, ND_LT, ND_LE:
 		println("  cmp %s, %s", di, ax)
@@ -1083,6 +1111,16 @@ func (a RiscV) genExpr(node *Node) {
 		return
 	case ND_NEG:
 		a.genExpr(node.lhs)
+
+		switch node.ty.kind {
+		case TY_FLOAT:
+			println("  fneg.s fa0, fa0")
+			return
+		case TY_DOUBLE:
+			println("  fneg.d fa0, fa0")
+			return
+		}
+
 		if node.ty.size <= 4 {
 			println("  neg%s a0, a0", "w")
 		} else {
@@ -1232,12 +1270,24 @@ func (a RiscV) genExpr(node *Node) {
 		}
 
 		switch node.kind {
+		case ND_ADD:
+			println("  fadd.%s fa0, fa0, fa1", suffix)
+			return
+		case ND_SUB:
+			println("  fsub.%s fa0, fa0, fa1", suffix)
+			return
+		case ND_MUL:
+			println("  fmul.%s fa0, fa0, fa1", suffix)
+			return
+		case ND_DIV:
+			println("  fdiv.%s fa0, fa0, fa1", suffix)
+			return
 		case ND_EQ:
 			println("  feq.%s a0, fa0, fa1", suffix)
 			return
 		case ND_NE:
 			println("  feq.%s a0, fa0, fa1", suffix)
-			println("  seqz a0,a0")
+			println("  seqz a0, a0")
 			return
 		case ND_LT:
 			println("  flt.%s a0, fa0, fa1", suffix)

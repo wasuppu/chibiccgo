@@ -80,6 +80,10 @@ func (ty Type) isFlonum() bool {
 	return ty.kind == TY_FLOAT || ty.kind == TY_DOUBLE
 }
 
+func (ty Type) isNumeric() bool {
+	return ty.isInteger() || ty.isFlonum()
+}
+
 func copyType(ty *Type) *Type {
 	ret := Type{}
 	ret = *ty
