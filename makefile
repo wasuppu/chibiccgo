@@ -1,20 +1,15 @@
-# If the first argument is good pass the rest of the line to the target
-ifeq (chibicc,$(firstword $(MAKECMDGOALS)))
-  # use the rest as arguments for "good"
-  RUN_ARGS := $(wordlist 2,$(words $(MAKECMDGOALS)),$(MAKECMDGOALS))
-  # ...and turn them into do-nothing targets
-  $(eval $(RUN_ARGS):;@:)
-  .PHONY: $(RUN_ARGS)
-endif
-
-# make chibicc xn
 chibicc:
-	go build -o chibicc ./$(wordlist 2,2,$(MAKECMDGOALS))
+	go build -o chibicc *.go
 
-test:
-	@-./test.sh || true
+x64: chibicc
+	./test.sh "x64"
+
+riscv: chibicc
+	./test.sh "riscv"
+
+test: x64 riscv
 
 clean:
-	rm -f chibicc *.o *.s tmp*
+	rm -f chibicc *.o *~ tmp*
 
-.PHONY: chibicc clean test
+.PHONY: x64 riscv test clean

@@ -44,21 +44,14 @@ func (tok Token) equal(op string) bool {
 // Ensure that the current token is `s`.
 func (tok Token) skip(s string) *Token {
 	if !tok.equal(s) {
-		fail("expected '%s'", s)
+		failTok(&tok, "expected '%s'", s)
 	}
 	return tok.next
 }
 
-// Ensure that the current token is TK_NUM.
-func (tok Token) getNumber() int {
-	if tok.kind != TK_NUM {
-		fail("expected a number")
-	}
-	return tok.val
-}
-
 // Tokenize `p` and returns new tokens.
-func tokenize(input string) *Token {
+func tokenize() *Token {
+	input := source
 	head := Token{}
 	cur := &head
 	p := 0
@@ -81,14 +74,14 @@ func tokenize(input string) *Token {
 		}
 
 		// Punctuator
-		if input[p] == '+' || input[p] == '-' {
+		if unicode.IsPunct(rune(input[p])) || unicode.IsSymbol(rune(input[p])) {
 			cur.next = NewToken(TK_PUNCT, p, 1, input[p:p+1])
 			cur = cur.next
 			p++
 			continue
 		}
 
-		fail("invalid token: %c", input[p])
+		failAt(p, "invalid token")
 	}
 
 	cur.next = NewToken(TK_EOF, p, 0, "")
@@ -102,7 +95,7 @@ func parseNumber(s string, pos int) (int, int) {
 	}
 	num, err := strconv.Atoi(s[start:pos])
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "%s: invalid argument convert to number\n", s[start:pos])
+		fmt.Fprintf(os.Stderr, "%s: invalid argument convert to number: %s\n", s[start:pos], err)
 		os.Exit(1)
 	}
 	return num, pos

@@ -1,67 +1,45 @@
 #!/bin/bash
 
-# use with ./test x[n]
+arch=$1
+case $arch in
+    "x64")
+        build_cmd="gcc -static -o tmp tmp.s"
+        run_cmd="./tmp"
+        ;;
+    "riscv")
+        build_cmd="riscv64-unknown-elf-gcc -static -o tmp tmp.s"
+        run_cmd="qemu-riscv64 -L \$RISCV/sysroot ./tmp"
+        ;;
+    *)
+        echo "Error: unsupported architecture $arch"
+        exit 1
+        ;;
+esac
 
-if [[ $1 =~ ^x[0-9]+$ ]]; then
-    make chibicc $1 || exit 1
-fi
-
-if ! command -v ./chibicc &> /dev/null; then
-    echo "Error: chibicc not found in current directory"
-    exit 1
-fi
 
 assert() {
-  expected=$1
-  input=$2
+    expected=$1
+    input=$2
 
-  ./chibicc "$input" > tmp.s || exit
-  gcc -static -o tmp tmp.s
-  ./tmp
-  actual="$?"
+    ./chibicc $arch "$input" > tmp.s || exit
+    eval $build_cmd
+    eval $run_cmd
+    actual="$?"
 
-  if [ "$actual" = "$expected" ]; then
-    echo "$input => $actual"
-  else
-    echo "$input => $expected expected, but got $actual"
-    exit 1
-  fi
+    if [ "$actual" = "$expected" ]; then
+        echo "$input => $actual"
+    else
+        echo "$input => $expected expected, but got $actual"
+        exit 1
+    fi
 }
 
-run_tests() {
-    local level=${1#x}
-    for ((i=1; i<=level; i++)); do
-        func="test$i"
-        if declare -F "$func" > /dev/null; then
-            $func || exit 1
-        fi
-    done
-}
-
-test1() {
-    assert 0 0
-    assert 42 42
-}
-
-test2() {
-    assert 21 '5+20-4'
-}
-
-test3() {
-    assert 41 ' 12 + 34 - 5 '
-}
-
-test5() {
-    assert 47 '5+6*7'
-    assert 15 '5*(9-6)'
-    assert 4 '(3+5)/2'
-}
-
-if [[ $1 =~ ^x[0-9]+$ ]]; then
-    run_tests "$1"
-else
-    echo "Error: target must be like xn, $1 is not support"
-    exit 1
-fi
+assert 0 0
+assert 42 42
+assert 21 '5+20-4'
+assert 41 ' 12 + 34 - 5 '
+assert 47 '5+6*7'
+assert 15 '5*(9-6)'
+assert 4 '(3+5)/2'
 
 echo OK
