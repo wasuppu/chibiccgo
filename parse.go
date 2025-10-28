@@ -29,9 +29,10 @@ var currentSwitch *Node
 // can be nested (e.g. `int x[2][2] = {{1, 2}, {3, 4}}`), this struct
 // is a tree data structure.
 type Initializer struct {
-	next *Initializer
-	ty   *Type
-	tok  *Token
+	next       *Initializer
+	ty         *Type
+	tok        *Token
+	isFlexible bool
 
 	// If it's not an aggregate type and has an initializer,
 	// `expr` has an initialization expression.
@@ -312,14 +313,19 @@ func NewCast(expr *Node, ty *Type) *Node {
 	}
 }
 
-func NewInitializer(ty *Type) *Initializer {
+func NewInitializer(ty *Type, isFlexible bool) *Initializer {
 	init := &Initializer{}
 	init.ty = ty
 
 	if ty.kind == TY_ARRAY {
+		if isFlexible && ty.size < 0 {
+			init.isFlexible = true
+			return init
+		}
+
 		init.children = make([]*Initializer, ty.arrayLen)
 		for i := range ty.arrayLen {
-			init.children[i] = NewInitializer(ty.base)
+			init.children[i] = NewInitializer(ty.base, false)
 		}
 	}
 
@@ -668,9 +674,6 @@ func declaration(rest **Token, tok *Token, basety *Type) *Node {
 		i++
 
 		ty := declarator(&tok, tok, basety)
-		if ty.size < 0 {
-			failTok(tok, "variable has incomplete type")
-		}
 		if ty.kind == TY_VOID {
 			failTok(tok, "variable declared void")
 		}
@@ -681,6 +684,13 @@ func declaration(rest **Token, tok *Token, basety *Type) *Node {
 			expr := lvarInitializer(&tok, tok.next, vara)
 			cur.next = NewUnary(ND_EXPR_STMT, expr, tok)
 			cur = cur.next
+		}
+
+		if vara.ty.size < 0 {
+			failTok(ty.name, "variable has incomplete type")
+		}
+		if vara.ty.kind == TY_VOID {
+			failTok(ty.name, "variable declared void")
 		}
 	}
 
@@ -702,6 +712,10 @@ func skipExcessElement(tok *Token) *Token {
 
 // string-initializer = string-literal
 func stringInitializer(rest **Token, tok *Token, init *Initializer) {
+	if init.isFlexible {
+		*init = *NewInitializer(arrayOf(init.ty.base, tok.ty.arrayLen), false)
+	}
+
 	len := min(init.ty.arrayLen, tok.ty.arrayLen)
 	for i := range len {
 		init.children[i].expr = NewNum(int64(tok.str[i]), tok)
@@ -709,9 +723,27 @@ func stringInitializer(rest **Token, tok *Token, init *Initializer) {
 	*rest = tok.next
 }
 
+func countArrayInitElements(tok *Token, ty *Type) int {
+	dummy := NewInitializer(ty.base, false)
+	i := 0
+
+	for ; !tok.equal("}"); i++ {
+		if i > 0 {
+			tok = tok.skip(",")
+		}
+		initializer2(&tok, tok, dummy)
+	}
+	return i
+}
+
 // array-initializer = "{" initializer ("," initializer)* "}"
 func arrayInitializer(rest **Token, tok *Token, init *Initializer) {
 	tok = tok.skip("{")
+
+	if init.isFlexible {
+		len := countArrayInitElements(tok, init.ty)
+		*init = *NewInitializer(arrayOf(init.ty.base, len), false)
+	}
 
 	for i := 0; !consume(rest, tok, "}"); i++ {
 		if i > 0 {
@@ -741,9 +773,10 @@ func initializer2(rest **Token, tok *Token, init *Initializer) {
 	init.expr = assign(rest, tok)
 }
 
-func initializer(rest **Token, tok *Token, ty *Type) *Initializer {
-	init := NewInitializer(ty)
+func initializer(rest **Token, tok *Token, ty *Type, newty **Type) *Initializer {
+	init := NewInitializer(ty, true)
 	initializer2(rest, tok, init)
+	*newty = init.ty
 	return init
 }
 
@@ -787,7 +820,7 @@ func createLVarInit(init *Initializer, ty *Type, desg *InitDesg, tok *Token) *No
 //	x[1][0] = 8;
 //	x[1][1] = 9;
 func lvarInitializer(rest **Token, tok *Token, vara *Obj) *Node {
-	init := initializer(rest, tok, vara.ty)
+	init := initializer(rest, tok, vara.ty, &vara.ty)
 	desg := InitDesg{nil, 0, vara}
 
 	// If a partial initializer list is given, the standard requires
