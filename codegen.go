@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"math"
 	"os"
 )
 
@@ -283,6 +284,21 @@ func (a X64) genExpr(node *Node) {
 	case ND_NULL_EXPR:
 		return
 	case ND_NUM:
+		switch node.ty.kind {
+		case TY_FLOAT:
+			f32 := float32(node.fval)
+			u32 := math.Float32bits(f32)
+			println("  mov $%d, %%eax  # float %f", u32, node.fval)
+			println("  movq %%rax, %%xmm0")
+			return
+		case TY_DOUBLE:
+			f64 := node.fval
+			u64 := math.Float64bits(f64)
+			println("  mov $%d, %%rax  # double %f", u64, node.fval)
+			println("  movq %%rax, %%xmm0")
+			return
+		}
+
 		println("  mov $%d, %%rax", node.val)
 		return
 	case ND_NEG:
@@ -877,6 +893,21 @@ func (a RiscV) genExpr(node *Node) {
 	case ND_NULL_EXPR:
 		return
 	case ND_NUM:
+		switch node.ty.kind {
+		case TY_FLOAT:
+			f32 := float32(node.fval)
+			u32 := math.Float32bits(f32)
+			println("  li a0, %d  # float %f", u32, node.fval)
+			println("  fmv.w.x fa0, a0")
+			return
+		case TY_DOUBLE:
+			f64 := node.fval
+			u64 := math.Float64bits(f64)
+			println("  li a0, %d  # double %f", u64, node.fval)
+			println("  fmv.d.x fa0, a0")
+			return
+		}
+
 		println("  li a0, %d", node.val)
 		return
 	case ND_NEG:

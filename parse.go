@@ -196,7 +196,8 @@ type Node struct {
 	vara *Obj
 
 	// Numeric literal
-	val int64
+	val  int64
+	fval float64
 }
 
 // Scope for local variables, global variables, typedefs
@@ -2479,7 +2480,14 @@ func primary(rest **Token, tok *Token) *Node {
 	}
 
 	if tok.kind == TK_NUM {
-		node := NewNum(tok.val, tok)
+		var node *Node
+		if tok.ty.isFlonum() {
+			node = NewNode(ND_NUM, tok)
+			node.fval = tok.fval
+		} else {
+			node = NewNum(tok.val, tok)
+		}
+
 		node.ty = tok.ty
 		*rest = tok.next
 		return node

@@ -46,6 +46,7 @@ type Token struct {
 	kind   TokenKind // Token kind
 	next   *Token    // Next token
 	val    int64     // If kind is TK_NUM, its value
+	fval   float64   // If kind is TK_NUM, its value
 	loc    int       // Token location
 	len    int       // Token length
 	lexeme string    // Token lexeme value in string
@@ -259,12 +260,8 @@ func readIntLiteral(start int) *Token {
 		base = 8
 	}
 
-	end := getIntegerEnd(source[p:])
-	val, err := strconv.ParseUint(source[p:p+end], base, 64)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "%s: invalid argument convert to number: %s\n", source[start:p+end], err)
-		os.Exit(1)
-	}
+	end := getIntegerEnd(source[p:], base)
+	val, _ := strconv.ParseUint(source[p:p+end], base, 64)
 
 	p += end
 
@@ -292,10 +289,6 @@ func readIntLiteral(start int) *Token {
 	} else if source[p] == 'U' || source[p] == 'u' {
 		p++
 		u = true
-	}
-
-	if unicode.IsDigit(rune(source[p])) || unicode.IsLetter(rune(source[p])) {
-		failAt(p, "invalid digit")
 	}
 
 	// Infer a type.
@@ -346,6 +339,42 @@ func readIntLiteral(start int) *Token {
 
 	tok := NewToken(TK_NUM, start, p-start, source[start:p])
 	tok.val = int64(val)
+	tok.ty = ty
+	return tok
+}
+
+func readNumber(start int) *Token {
+	p := start
+	// Try to parse as an integer constant.
+	tok := readIntLiteral(p)
+	idx := strings.Index(".eEfF", string(source[p+tok.len]))
+	if idx == -1 {
+		return tok
+	}
+
+	// If it's not an integer, it must be a floating point constant.
+	end := getFloatEnd(source[p:])
+	val, err := strconv.ParseFloat(source[p:p+end], 64)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%s: invalid argument convert to float: %s\n", source[p:p+end], err)
+		os.Exit(1)
+	}
+	p += end
+
+	var ty *Type
+	switch source[p] {
+	case 'f', 'F':
+		ty = tyFloat
+		p++
+	case 'l', 'L':
+		ty = tyDouble
+		p++
+	default:
+		ty = tyDouble
+	}
+
+	tok = NewToken(TK_NUM, start, p-start, source[start:p])
+	tok.fval = val
 	tok.ty = ty
 	return tok
 }
@@ -414,8 +443,8 @@ func tokenize(filename string, input string) *Token {
 		}
 
 		// Numeric literal
-		if unicode.IsDigit(rune(input[p])) {
-			cur.next = readIntLiteral(p)
+		if unicode.IsDigit(rune(input[p])) || (input[p] == '.' && unicode.IsDigit(rune(input[p+1]))) {
+			cur.next = readNumber(p)
 			cur = cur.next
 			p += cur.len
 			continue
@@ -494,12 +523,88 @@ func tokenizeFile(path string) *Token {
 	return tokenize(path, readFile(path))
 }
 
-func getIntegerEnd(s string) int {
+func getIntegerEnd(s string, base int) int {
 	end := 0
-	for end < len(s) && isXDigit(s[end]) {
-		end++
+	switch base {
+	case 16:
+		for isXDigit(s[end]) {
+			end++
+		}
+	case 10:
+		for s[end] >= '0' && s[end] <= '9' {
+			end++
+		}
+	case 8:
+		for s[end] >= '0' && s[end] <= '7' {
+			end++
+		}
+	case 2:
+		for s[end] == '0' || s[end] == '1' {
+			end++
+		}
 	}
 	return end
+}
+
+func getFloatEnd(s string) int {
+	if s[0] == '0' && (s[1] == 'x' || s[1] == 'X') {
+		return getHexFloatEnd(s)
+	}
+	return getDecimalFloatEnd(s)
+}
+
+func getHexFloatEnd(s string) int {
+	i := 0
+	if s[i] != '0' || (s[i+1] != 'x' && s[i+1] != 'X') {
+		return -1
+	}
+	i += 2
+
+	for isXDigit(s[i]) || s[i] == '.' {
+		i++
+	}
+
+	if s[i] != 'p' && s[i] != 'P' {
+		return i
+	}
+	i++
+
+	expStart := i
+	for unicode.IsDigit(rune(s[i])) || s[i] == '+' || s[i] == '-' {
+		i++
+	}
+
+	if i == expStart {
+		return expStart - 1
+	}
+
+	return i
+}
+
+func getDecimalFloatEnd(s string) int {
+	i := 0
+	for unicode.IsDigit(rune(s[i])) {
+		i++
+	}
+
+	if s[i] == '.' {
+		i++
+		for unicode.IsDigit(rune(s[i])) {
+			i++
+		}
+	}
+
+	if s[i] == 'e' || s[i] == 'E' {
+		i++
+		if s[i] == '+' || s[i] == '-' {
+			i++
+		}
+		for unicode.IsDigit(rune(s[i])) {
+			i++
+		}
+	}
+
+	return i
 }
 
 func isXDigit(c byte) bool {

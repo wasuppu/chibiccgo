@@ -13,6 +13,9 @@ var tyUShort = &Type{kind: TY_SHORT, size: 2, align: 2, isUnsigned: true}
 var tyUInt = &Type{kind: TY_INT, size: 4, align: 4, isUnsigned: true}
 var tyULong = &Type{kind: TY_LONG, size: 8, align: 8, isUnsigned: true}
 
+var tyFloat = &Type{kind: TY_FLOAT, size: 4, align: 4}
+var tyDouble = &Type{kind: TY_DOUBLE, size: 8, align: 8}
+
 type TypeKind int
 
 const (
@@ -22,6 +25,8 @@ const (
 	TY_SHORT
 	TY_INT
 	TY_LONG
+	TY_FLOAT
+	TY_DOUBLE
 	TY_ENUM
 	TY_PTR
 	TY_FUNC
@@ -69,6 +74,10 @@ func (ty Type) isInteger() bool {
 	k := ty.kind
 	return k == TY_BOOL || k == TY_CHAR || k == TY_SHORT ||
 		k == TY_INT || k == TY_LONG || k == TY_ENUM
+}
+
+func (ty Type) isFlonum() bool {
+	return ty.kind == TY_FLOAT || ty.kind == TY_DOUBLE
 }
 
 func copyType(ty *Type) *Type {
