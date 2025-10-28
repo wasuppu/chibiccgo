@@ -25,6 +25,30 @@ var contLabel string
 // a switch statement. Otherwise, NULL.
 var currentSwitch *Node
 
+// This struct represents a variable initializer. Since initializers
+// can be nested (e.g. `int x[2][2] = {{1, 2}, {3, 4}}`), this struct
+// is a tree data structure.
+type Initializer struct {
+	next *Initializer
+	ty   *Type
+	tok  *Token
+
+	// If it's not an aggregate type and has an initializer,
+	// `expr` has an initialization expression.
+	expr *Node
+
+	// If it's an initializer for an aggregate type (e.g. array or struct),
+	// `children` has initializers for its children.
+	children []*Initializer
+}
+
+// For local variable initializer.
+type InitDesg struct {
+	next *InitDesg
+	idx  int
+	vara *Obj
+}
+
 // Struct member
 type Member struct {
 	next   *Member
@@ -62,7 +86,8 @@ type Obj struct {
 type NodeKind int
 
 const (
-	ND_ADD       NodeKind = iota // +
+	ND_NULL_EXPR NodeKind = iota // Do nothing
+	ND_ADD                       // +
 	ND_SUB                       // -
 	ND_MUL                       // *
 	ND_DIV                       // /
@@ -284,6 +309,20 @@ func NewCast(expr *Node, ty *Type) *Node {
 		lhs:  expr,
 		ty:   copyType(ty),
 	}
+}
+
+func NewInitializer(ty *Type) *Initializer {
+	init := &Initializer{}
+	init.ty = ty
+
+	if ty.kind == TY_ARRAY {
+		init.children = make([]*Initializer, ty.arrayLen)
+		for i := range ty.arrayLen {
+			init.children[i] = NewInitializer(ty.base)
+		}
+	}
+
+	return init
 }
 
 func NewVar(name string, ty *Type) *Obj {
@@ -637,21 +676,84 @@ func declaration(rest **Token, tok *Token, basety *Type) *Node {
 
 		vara := NewLVar(getIdent(ty.name), ty)
 
-		if !tok.equal("=") {
-			continue
+		if tok.equal("=") {
+			expr := lvarInitializer(&tok, tok.next, vara)
+			cur.next = NewUnary(ND_EXPR_STMT, expr, tok)
+			cur = cur.next
 		}
-
-		lhs := NewVarNode(vara, ty.name)
-		rhs := assign(&tok, tok.next)
-		node := NewBinary(ND_ASSIGN, lhs, rhs, tok)
-		cur.next = NewUnary(ND_EXPR_STMT, node, tok)
-		cur = cur.next
 	}
 
 	node := NewNode(ND_BLOCK, tok)
 	node.body = head.next
 	*rest = tok.next
 	return node
+}
+
+// initializer = "{" initializer ("," initializer)* "}"
+// | assign
+func initializer2(rest **Token, tok *Token, init *Initializer) {
+	if init.ty.kind == TY_ARRAY {
+		tok = tok.skip("{")
+
+		for i := range init.ty.arrayLen {
+			if i > 0 {
+				tok = tok.skip(",")
+			}
+			initializer2(&tok, tok, init.children[i])
+		}
+		*rest = tok.skip("}")
+		return
+	}
+
+	init.expr = assign(rest, tok)
+}
+
+func initializer(rest **Token, tok *Token, ty *Type) *Initializer {
+	init := NewInitializer(ty)
+	initializer2(rest, tok, init)
+	return init
+}
+
+func initDesgExpr(desg *InitDesg, tok *Token) *Node {
+	if desg.vara != nil {
+		return NewVarNode(desg.vara, tok)
+	}
+
+	lhs := initDesgExpr(desg.next, tok)
+	rhs := NewNum(int64(desg.idx), tok)
+	return NewUnary(ND_DEREF, newAdd(lhs, rhs, tok), tok)
+}
+
+func createLVarInit(init *Initializer, ty *Type, desg *InitDesg, tok *Token) *Node {
+	if ty.kind == TY_ARRAY {
+		node := NewNode(ND_NULL_EXPR, tok)
+		for i := range ty.arrayLen {
+			desg2 := InitDesg{next: desg, idx: i}
+			rhs := createLVarInit(init.children[i], ty.base, &desg2, tok)
+			node = NewBinary(ND_COMMA, node, rhs, tok)
+		}
+		return node
+	}
+
+	lhs := initDesgExpr(desg, tok)
+	rhs := init.expr
+	return NewBinary(ND_ASSIGN, lhs, rhs, tok)
+}
+
+// A variable definition with an initializer is a shorthand notation
+// for a variable definition followed by assignments. This function
+// generates assignment expressions for an initializer. For example,
+// `int x[2][2] = {{6, 7}, {8, 9}}` is converted to the following
+// expressions:
+//
+//	x[0][0] = 6;
+//	x[0][1] = 7;
+//	x[1][0] = 8;
+//	x[1][1] = 9;
+func lvarInitializer(rest **Token, tok *Token, vara *Obj) *Node {
+	init := initializer(rest, tok, vara.ty)
+	desg := InitDesg{nil, 0, vara}
+	return createLVarInit(init, vara.ty, &desg, tok)
 }
 
 var typenames = []string{

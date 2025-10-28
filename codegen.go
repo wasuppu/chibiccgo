@@ -229,6 +229,8 @@ func (a X64) genExpr(node *Node) {
 	println("  .loc 1 %d", node.tok.lineno)
 
 	switch node.kind {
+	case ND_NULL_EXPR:
+		return
 	case ND_NUM:
 		println("  mov $%d, %%rax", node.val)
 		return
@@ -678,6 +680,8 @@ func (a RiscV) genExpr(node *Node) {
 	println("  .loc 1 %d", node.tok.lineno)
 
 	switch node.kind {
+	case ND_NULL_EXPR:
+		return
 	case ND_NUM:
 		println("  li a0, %d", node.val)
 		return
