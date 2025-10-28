@@ -155,11 +155,7 @@ func (node *Node) addType() {
 
 	switch node.kind {
 	case ND_NUM:
-		if node.val == int64(int32(node.val)) {
-			node.ty = tyInt
-		} else {
-			node.ty = tyLong
-		}
+		node.ty = tyInt
 		return
 	case ND_ADD, ND_SUB, ND_MUL, ND_DIV,
 		ND_MOD, ND_BITAND, ND_BITOR, ND_BITXOR:

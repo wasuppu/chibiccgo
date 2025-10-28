@@ -48,7 +48,7 @@ type Token struct {
 	loc    int       // Token location
 	len    int       // Token length
 	lexeme string    // Token lexeme value in string
-	ty     *Type     // Used if TK_STR
+	ty     *Type     // Used if TK_NUM or TK_STR
 	str    string    // String literal contents including terminating '\0'
 	lineno int       // Line number
 }
@@ -239,17 +239,19 @@ func readCharLiteral(start int) *Token {
 
 	tok := NewToken(TK_NUM, start, p+end-start+1, source[start:p+end+1])
 	tok.val = int64(int8(c))
+	tok.ty = tyInt
 	return tok
 }
 
 func readIntLiteral(start int) *Token {
 	p := start
 
+	// Read a binary, octal, decimal or hexadecimal number.
 	base := 10
 	if strings.HasPrefix(strings.ToLower(source[p:p+2]), "0x") && isXDigit(source[p+2]) {
 		p += 2
 		base = 16
-	} else if strings.HasPrefix(strings.ToLower(source[p:p+2]), "0b") && isXDigit(source[p+2]) {
+	} else if strings.HasPrefix(strings.ToLower(source[p:p+2]), "0b") && (source[p+2] == '0' || source[p+2] == '1') {
 		p += 2
 		base = 2
 	} else if source[p] == '0' {
@@ -257,7 +259,7 @@ func readIntLiteral(start int) *Token {
 	}
 
 	end := getIntegerEnd(source[p:])
-	val, err := strconv.ParseInt(source[p:p+end], base, 64)
+	val, err := strconv.ParseUint(source[p:p+end], base, 64)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%s: invalid argument convert to number: %s\n", source[start:p+end], err)
 		os.Exit(1)
@@ -265,12 +267,85 @@ func readIntLiteral(start int) *Token {
 
 	p += end
 
+	// Read U, L or LL suffixes.
+	l := false
+	u := false
+
+	if strings.HasPrefix(source[p:], "LLU") || strings.HasPrefix(source[p:], "LLu") ||
+		strings.HasPrefix(source[p:], "llU") || strings.HasPrefix(source[p:], "llu") ||
+		strings.HasPrefix(source[p:], "ULL") || strings.HasPrefix(source[p:], "Ull") ||
+		strings.HasPrefix(source[p:], "uLL") || strings.HasPrefix(source[p:], "ull") {
+		p += 3
+		u = true
+		l = true
+	} else if strings.ToLower(source[p:p+2]) == "lu" || strings.ToLower(source[p:p+2]) == "ul" {
+		p += 2
+		u = true
+		l = true
+	} else if strings.HasPrefix(source[p:], "LL") || strings.HasPrefix(source[p:], "ll") {
+		p += 2
+		l = true
+	} else if source[p] == 'L' || source[p] == 'l' {
+		p++
+		l = true
+	} else if source[p] == 'U' || source[p] == 'u' {
+		p++
+		u = true
+	}
+
 	if unicode.IsDigit(rune(source[p])) || unicode.IsLetter(rune(source[p])) {
 		failAt(p, "invalid digit")
 	}
 
+	// Infer a type.
+	var ty *Type
+	if base == 10 {
+		if l && u {
+			ty = tyULong
+		} else if l {
+			ty = tyLong
+		} else if u {
+			if val>>32 != 0 {
+				ty = tyULong
+			} else {
+				ty = tyUInt
+			}
+		} else {
+			if val>>31 != 0 {
+				ty = tyLong
+			} else {
+				ty = tyInt
+			}
+		}
+	} else {
+		if l && u {
+			ty = tyULong
+		} else if l {
+			if val>>63 != 0 {
+				ty = tyULong
+			} else {
+				ty = tyLong
+			}
+		} else if u {
+			if val>>32 != 0 {
+				ty = tyULong
+			} else {
+				ty = tyUInt
+			}
+		} else if val>>63 != 0 {
+			ty = tyULong
+		} else if val>>32 != 0 {
+			ty = tyLong
+		} else if val>>31 != 0 {
+			ty = tyUInt
+		} else {
+			ty = tyInt
+		}
+	}
+
 	tok := NewToken(TK_NUM, start, p-start, source[start:p])
-	tok.val = val
+	tok.val = int64(val)
+	tok.ty = ty
 	return tok
 }
 

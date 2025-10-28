@@ -2405,6 +2405,7 @@ func primary(rest **Token, tok *Token) *Node {
 
 	if tok.kind == TK_NUM {
 		node := NewNum(tok.val, tok)
+		node.ty = tok.ty
 		*rest = tok.next
 		return node
 	}
