@@ -474,10 +474,17 @@ func (a X64) pushArgs2(args *Node, firstPass bool) {
 // stored to the stack as local variables. What we need to do in this
 // function is to load them to registers or push them to the stack as
 // specified by the x86-64 psABI.
-func (a X64) pushArgs(args *Node) int {
+func (a X64) pushArgs(node *Node) int {
 	stack, gp, fp := 0, 0, 0
 
-	for arg := args; arg != nil; arg = arg.next {
+	// If the return type is a large struct/union, the caller passes
+	// a pointer to a buffer as if it were the first argument.
+	if node.retBuffer != nil && node.ty.size > 16 {
+		gp++
+	}
+
+	// Load as many arguments to the registers as possible.
+	for arg := node.args; arg != nil; arg = arg.next {
 		ty := arg.ty
 
 		switch ty.kind {
@@ -529,9 +536,62 @@ func (a X64) pushArgs(args *Node) int {
 		stack++
 	}
 
-	a.pushArgs2(args, true)
-	a.pushArgs2(args, false)
+	a.pushArgs2(node.args, true)
+	a.pushArgs2(node.args, false)
+
+	// If the return type is a large struct/union, the caller passes
+	// a pointer to a buffer as if it were the first argument.
+	if node.retBuffer != nil && node.ty.size > 16 {
+		println("  lea %d(%%rbp), %%rax", node.retBuffer.offset)
+		a.push()
+	}
+
 	return stack
+}
+
+func (a X64) copyRetBuffer(vara *Obj) {
+	ty := vara.ty
+	gp, fp := 0, 0
+
+	if hasFlonum1(ty) {
+		assert(ty.size == 4 || 8 <= ty.size)
+		if ty.size == 4 {
+			println("  movss %%xmm0, %d(%%rbp)", vara.offset)
+		} else {
+			println("  movsd %%xmm0, %d(%%rbp)", vara.offset)
+		}
+		fp++
+	} else {
+		for i := range min(8, ty.size) {
+			println("  mov %%al, %d(%%rbp)", vara.offset+i)
+			println("  shr $8, %%rax")
+		}
+		gp++
+	}
+
+	if ty.size > 8 {
+		if hasFlonum2(ty) {
+			assert(ty.size == 12 || ty.size == 16)
+			if ty.size == 12 {
+				println("  movss %%xmm%d, %d(%%rbp)", fp, vara.offset+8)
+			} else {
+				println("  movsd %%xmm%d, %d(%%rbp)", fp, vara.offset+8)
+			}
+		} else {
+			var reg1, reg2 string
+			if gp == 0 {
+				reg1 = "%al"
+				reg2 = "%rax"
+			} else {
+				reg1 = "%dl"
+				reg2 = "%rdx"
+			}
+			for i := 8; i < min(16, ty.size); i++ {
+				println("  mov %s, %d(%%rbp)", reg1, vara.offset+i)
+				println("  shr $8, %s", reg2)
+			}
+		}
+	}
 }
 
 // Compute the absolute address of a given node.
@@ -569,6 +629,11 @@ func (a X64) genAddr(node *Node) {
 		a.genAddr(node.lhs)
 		println("  add $%d, %%rax", node.member.offset)
 		return
+	case ND_FUNCALL:
+		if node.retBuffer != nil {
+			a.genExpr(node)
+			return
+		}
 	}
 
 	failTok(node.tok, "not an lvalue")
@@ -706,9 +771,17 @@ func (a X64) genExpr(node *Node) {
 		println(".L.end.%d:", c)
 		return
 	case ND_FUNCALL:
-		stackArgs := a.pushArgs(node.args)
+		stackArgs := a.pushArgs(node)
 		a.genExpr(node.lhs)
 		gp, fp := 0, 0
+
+		// If the return type is a large struct/union, the caller passes
+		// a pointer to a buffer as if it were the first argument.
+		if node.retBuffer != nil && node.ty.size > 16 {
+			a.pop(argReg64x[gp])
+			gp++
+		}
+
 		for arg := node.args; arg != nil; arg = arg.next {
 			ty := arg.ty
 
@@ -793,6 +866,14 @@ func (a X64) genExpr(node *Node) {
 			}
 			return
 		}
+
+		// If the return type is a small struct, a value is returned
+		// using up to two registers.
+		if node.retBuffer != nil && node.ty.size <= 16 {
+			a.copyRetBuffer(node.retBuffer)
+			println("  lea %d(%%rbp), %%rax", node.retBuffer.offset)
+		}
+
 		return
 	}
 
@@ -1491,10 +1572,17 @@ func (a RiscV) pushArgs2(args *Node, firstPass bool) {
 // stored to the stack as local variables. What we need to do in this
 // function is to load them to registers or push them to the stack as
 // specified by the x86-64 psABI.
-func (a RiscV) pushArgs(args *Node) int {
+func (a RiscV) pushArgs(node *Node) int {
 	stack, gp, fp := 0, 0, 0
 
-	for arg := args; arg != nil; arg = arg.next {
+	// If the return type is a large struct/union, the caller passes
+	// a pointer to a buffer as if it were the first argument.
+	if node.retBuffer != nil && node.ty.size > 16 {
+		gp++
+	}
+
+	// Load as many arguments to the registers as possible.
+	for arg := node.args; arg != nil; arg = arg.next {
 		ty := arg.ty
 
 		switch ty.kind {
@@ -1551,10 +1639,69 @@ func (a RiscV) pushArgs(args *Node) int {
 		stack++
 	}
 
-	bsStack := createBSSpace(args)
-	a.pushArgs2(args, true)
-	a.pushArgs2(args, false)
+	bsStack := createBSSpace(node.args)
+	a.pushArgs2(node.args, true)
+	a.pushArgs2(node.args, false)
+
+	// If the return type is a large struct/union, the caller passes
+	// a pointer to a buffer as if it were the first argument.
+	if node.retBuffer != nil && node.ty.size > 16 {
+		println("  li t0, %d", node.retBuffer.offset)
+		println("  add a0, fp, t0")
+		a.push()
+	}
+
 	return stack + bsStack
+}
+
+func (a RiscV) copyRetBuffer(vara *Obj) {
+	ty := vara.ty
+	gp, fp := 0, 0
+
+	setFloStMemsTy(&ty, gp, fp)
+
+	println("  li t0, %d", vara.offset)
+	println("  add t1, fp, t0")
+
+	if ty.fsReg1Ty.isFlonum() || ty.fsReg2Ty.isFlonum() {
+		off := 0
+		rtys := []*Type{ty.fsReg1Ty, ty.fsReg2Ty}
+		for i := range 2 {
+			switch rtys[i].kind {
+			case TY_FLOAT:
+				println("  fsw fa%d, %d(t1)", fp, off)
+				fp++
+				off = 4
+			case TY_DOUBLE:
+				println("  fsd fa%d, %d(t1)", fp, off)
+				fp++
+				off = 8
+			case TY_VOID:
+			default:
+				println("  sd a%d, %d(t1)", gp, off)
+				gp++
+				off = 8
+			}
+		}
+		return
+	}
+
+	for off := 0; off < ty.size; off += 8 {
+		switch ty.size - off {
+		case 1:
+			println("  sb a%d, %d(t1)", gp, off)
+			gp++
+		case 2:
+			println("  sh a%d, %d(t1)", gp, off)
+			gp++
+		case 3, 4:
+			println("  sw a%d, %d(t1)", gp, off)
+			gp++
+		default:
+			println("  sd a%d, %d(t1)", gp, off)
+			gp++
+		}
+	}
 }
 
 // Compute the absolute address of a given node.
@@ -1600,6 +1747,11 @@ func (a RiscV) genAddr(node *Node) {
 		println("  li t0, %d", node.member.offset)
 		println("  add a0, a0, t0")
 		return
+	case ND_FUNCALL:
+		if node.retBuffer != nil {
+			a.genExpr(node)
+			return
+		}
 	}
 
 	failTok(node.tok, "not an lvalue")
@@ -1734,11 +1886,19 @@ func (a RiscV) genExpr(node *Node) {
 		println(".L.end.%d:", c)
 		return
 	case ND_FUNCALL:
-		stackArgs := a.pushArgs(node.args)
+		stackArgs := a.pushArgs(node)
 		a.genExpr(node.lhs)
 		println("  mv t5, a0")
 
 		gp, fp := 0, 0
+
+		// If the return type is a large struct/union, the caller passes
+		// a pointer to a buffer as if it were the first argument.
+		if node.retBuffer != nil && node.ty.size > 16 {
+			a.pop(argRegR[gp])
+			gp++
+		}
+
 		curArg := node.functy.params
 		for arg := node.args; arg != nil; arg = arg.next {
 			if node.functy.isVariadic && curArg == nil {
@@ -1836,6 +1996,15 @@ func (a RiscV) genExpr(node *Node) {
 			}
 			return
 		}
+
+		// If the return type is a small struct, a value is returned
+		// using up to two registers.
+		if node.retBuffer != nil && node.ty.size <= 16 {
+			a.copyRetBuffer(node.retBuffer)
+			println("  li t0, %d", node.retBuffer.offset)
+			println("  add a0, fp, t0")
+		}
+
 		return
 	}
 

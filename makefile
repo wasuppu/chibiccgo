@@ -4,7 +4,7 @@ TESTS := $(patsubst test/%.c,$(TEST_DIR)/%.exe,$(TEST_SRCS))
 
 ifeq ($(ARCH),riscv)
     CC = riscv64-unknown-linux-gnu-gcc
-	RUN = qemu-riscv64 -L /opt/riscv-linux/sysroot
+    RUN = $(RISCV)/bin/qemu-riscv64 -L /opt/riscv-linux/sysroot
 	FLAG = -static
 	INCLUDE = include2
 else

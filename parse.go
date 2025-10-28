@@ -186,6 +186,7 @@ type Node struct {
 	functy      *Type
 	args        *Node
 	passByStack bool
+	retBuffer   *Obj
 
 	// Goto or labeled statement
 	label       string
@@ -2489,6 +2490,12 @@ func funcall(rest **Token, tok *Token, fn *Node) *Node {
 	node.functy = ty
 	node.ty = ty.returnTy
 	node.args = head.next
+
+	// If a function returns a struct, it is caller's responsibility
+	// to allocate a space for the return value.
+	if node.ty.kind == TY_STRUCT || node.ty.kind == TY_UNION {
+		node.retBuffer = NewLVar("", node.ty)
+	}
 	return node
 }
 
