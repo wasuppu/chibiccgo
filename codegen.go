@@ -72,6 +72,7 @@ func chooseArch(arch string) Arch {
 
 type Arch interface {
 	emitText(prog *Obj)
+	emitData(prog *Obj)
 }
 
 type X64 struct{}
@@ -531,6 +532,40 @@ func (a X64) emitText(prog *Obj) {
 	}
 }
 
+func (a X64) emitData(prog *Obj) {
+	for vara := prog; vara != nil; vara = vara.next {
+		if vara.isFunction {
+			continue
+		}
+
+		println("  .globl %s", vara.name)
+		println("  .align %d", vara.ty.align)
+
+		if len(vara.initData) > 0 {
+			println("  .data")
+			println("%s:", vara.name)
+
+			rel := vara.rel
+			pos := 0
+			for pos < vara.ty.size {
+				if rel != nil && rel.offset == pos {
+					println("  .quad %s%+d", rel.label, rel.addend)
+					rel = rel.next
+					pos += 8
+				} else {
+					println("  .byte %d", vara.initData[pos])
+					pos++
+				}
+			}
+			continue
+		}
+
+		println("  .bss")
+		println("%s:", vara.name)
+		println("  .zero %d", vara.ty.size)
+	}
+}
+
 type RiscV struct{}
 
 func (a RiscV) prologue(fname string, stackSize int, isStatic bool) {
@@ -959,13 +994,14 @@ func (a RiscV) emitText(prog *Obj) {
 	}
 }
 
-func emitData(prog *Obj) {
+func (a RiscV) emitData(prog *Obj) {
 	for vara := prog; vara != nil; vara = vara.next {
 		if vara.isFunction {
 			continue
 		}
 
 		println("  .globl %s", vara.name)
+		println("  .align %d", simpleLog2(vara.ty.align))
 
 		if len(vara.initData) > 0 {
 			println("  .data")
@@ -992,12 +1028,25 @@ func emitData(prog *Obj) {
 	}
 }
 
+func simpleLog2(num int) int {
+	n := num
+	e := 0
+	for n > 1 {
+		if n%2 == 1 {
+			fail(fmt.Sprintf("Wrong value %d", num))
+		}
+		n /= 2
+		e++
+	}
+	return e
+}
+
 func codegen(arch string, prog *Obj, out *os.File) {
 	outputFile = out
 	assignLVarOffsets(prog)
-	emitData(prog)
 
 	target := chooseArch(arch)
+	target.emitData(prog)
 	target.emitText(prog)
 }
 
