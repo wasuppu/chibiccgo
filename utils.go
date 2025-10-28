@@ -17,7 +17,7 @@ func fail(format string, args ...any) {
 // Reports an error message in the following format and exit.
 // foo.c:10: x = y + 1;
 // ^ <error message here>
-func failAt(loc int, format string, args ...any) {
+func vfailAt(lineno, loc int, format string, args ...any) {
 	// Find a line containing `loc`.
 	line := loc
 	for currentInputLoc < line && source[line-1] != '\n' {
@@ -27,14 +27,6 @@ func failAt(loc int, format string, args ...any) {
 	end := loc
 	for source[end] != '\n' {
 		end++
-	}
-
-	// Get a line number.
-	lineno := 1
-	for p := currentInputLoc; p < line; p++ {
-		if source[p] == '\n' {
-			lineno++
-		}
 	}
 
 	// Print out the line.
@@ -50,8 +42,19 @@ func failAt(loc int, format string, args ...any) {
 	os.Exit(1)
 }
 
+func failAt(loc int, format string, args ...any) {
+	// Get a line number.
+	lineno := 1
+	for p := currentInputLoc; p < loc; p++ {
+		if source[p] == '\n' {
+			lineno++
+		}
+	}
+	vfailAt(lineno, loc, format, args...)
+}
+
 func failTok(tok *Token, format string, args ...any) {
-	failAt(tok.loc, format, args...)
+	vfailAt(tok.lineno, tok.loc, format, args...)
 }
 
 func assert(condition bool) {

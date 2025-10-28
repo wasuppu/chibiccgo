@@ -38,6 +38,7 @@ type Token struct {
 	lexeme string    // Token lexeme value in string
 	ty     *Type     // Used if TK_STR
 	str    string    // String literal contents including terminating '\0'
+	lineno int       // Line number
 }
 
 // Create a new token.
@@ -212,6 +213,27 @@ func convertKeywords(tok *Token) {
 	}
 }
 
+// Initialize line info for all tokens.
+func addLineNumbers(tok *Token) {
+	p := currentInputLoc
+	n := 1
+
+	for {
+		if p == tok.loc {
+			tok.lineno = n
+			tok = tok.next
+		}
+		if source[p] == '\n' {
+			n++
+		}
+
+		p++
+		if p >= len(source) {
+			break
+		}
+	}
+}
+
 // Tokenize a given string and returns new tokens.
 func tokenize(filename string, input string) *Token {
 	currentFilename = filename
@@ -291,6 +313,7 @@ func tokenize(filename string, input string) *Token {
 	}
 
 	cur.next = NewToken(TK_EOF, p, 0, "")
+	addLineNumbers(head.next)
 	convertKeywords(head.next)
 	return head.next
 }
