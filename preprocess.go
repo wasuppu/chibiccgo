@@ -6,6 +6,13 @@ import (
 )
 
 var condIncl *CondIncl
+var macros *Macro
+
+type Macro struct {
+	next *Macro
+	name string
+	body *Token
+}
 
 type Ctx int
 
@@ -56,14 +63,14 @@ func newEof(tok *Token) *Token {
 
 // Append tok2 to the end of tok1.
 func (tok1 *Token) append(tok2 *Token) *Token {
-	if tok1 == nil || tok1.kind == TK_EOF {
+	if tok1.kind == TK_EOF {
 		return tok2
 	}
 
 	head := Token{}
 	cur := &head
 
-	for ; tok1 != nil && tok1.kind != TK_EOF; tok1 = tok1.next {
+	for ; tok1.kind != TK_EOF; tok1 = tok1.next {
 		cur.next = copyToken(tok1)
 		cur = cur.next
 	}
@@ -147,6 +154,40 @@ func pushCondIncl(tok *Token, included bool) *CondIncl {
 	return ci
 }
 
+func findMacro(tok *Token) *Macro {
+	if tok.kind != TK_IDENT {
+		return nil
+	}
+
+	for m := macros; m != nil; m = m.next {
+		if len(m.name) == tok.len && m.name == tok.lexeme {
+			return m
+		}
+	}
+	return nil
+}
+
+func addMacro(name string, body *Token) *Macro {
+	m := &Macro{
+		next: macros,
+		name: name,
+		body: body,
+	}
+	macros = m
+	return m
+}
+
+// If tok is a macro, expand it and return true.
+// Otherwise, do nothing and return false.
+func expandMacro(rest **Token, tok *Token) bool {
+	m := findMacro(tok)
+	if m == nil {
+		return false
+	}
+	*rest = m.body.append(tok.next)
+	return true
+}
+
 // Visit all tokens in `tok` while evaluating preprocessing
 // macros and directives.
 func preprocess2(tok *Token) *Token {
@@ -154,6 +195,11 @@ func preprocess2(tok *Token) *Token {
 	cur := &head
 
 	for tok.kind != TK_EOF {
+		// If it is a macro, expand it.
+		if expandMacro(&tok, tok) {
+			continue
+		}
+
 		// Pass through if it is not a "#".
 		if !isHash(tok) {
 			cur.next = tok
@@ -187,6 +233,16 @@ func preprocess2(tok *Token) *Token {
 			tok = skipLine(tok.next)
 
 			tok = tok2.append(tok)
+			continue
+		}
+
+		if tok.equal("define") {
+			tok = tok.next
+			if tok.kind != TK_IDENT {
+				failTok(tok, "macro name must be an identifier")
+			}
+			name := tok.lexeme
+			addMacro(name, copyLine(&tok, tok.next))
 			continue
 		}
 
