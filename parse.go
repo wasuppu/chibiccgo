@@ -107,15 +107,18 @@ type Node struct {
 	val  int64 // Used if kind == ND_NUM
 }
 
-// Scope for local, global variables or typedefs.
+// Scope for local variables, global variables, typedefs
+// or enum constants
 type VarScope struct {
 	next    *VarScope
 	name    string
 	vara    *Obj
 	typedef *Type
+	enumty  *Type
+	enumval int
 }
 
-// Scope for struct or union tags
+// Scope for struct, union or enum tags
 type TagScope struct {
 	next *TagScope
 	name string
@@ -316,7 +319,8 @@ const (
 
 // declspec = ("void" | "_Bool" | "char" | "short" | "int" | "long"
 // | "typedef"
-// | struct-decl | union-decl | typedef-name)+
+// | struct-decl | union-decl | typedef-name
+// | enum-specifier)+
 func declspec(rest **Token, tok *Token, attr *VarAttr) *Type {
 	ty := tyInt
 	counter := 0
@@ -334,7 +338,7 @@ func declspec(rest **Token, tok *Token, attr *VarAttr) *Type {
 
 		// Handle user-defined types.
 		ty2 := findTypedef(tok)
-		if tok.equal("struct") || tok.equal("union") || ty2 != nil {
+		if tok.equal("struct") || tok.equal("union") || tok.equal("enum") || ty2 != nil {
 			if counter != 0 {
 				break
 			}
@@ -343,6 +347,8 @@ func declspec(rest **Token, tok *Token, attr *VarAttr) *Type {
 				ty = structDecl(&tok, tok.next)
 			} else if tok.equal("union") {
 				ty = unionDecl(&tok, tok.next)
+			} else if tok.equal("enum") {
+				ty = enumSpecifier(&tok, tok.next)
 			} else {
 				ty = ty2
 				tok = tok.next
@@ -485,6 +491,64 @@ func typename(rest **Token, tok *Token) *Type {
 	return abstractDeclarator(rest, tok, ty)
 }
 
+// enum-specifier = ident? "{" enum-list? "}"
+// | ident ("{" enum-list? "}")?
+// enum-list      = ident ("=" num)? ("," ident ("=" num)?)*
+func enumSpecifier(rest **Token, tok *Token) *Type {
+	ty := enumType()
+
+	// Read a struct tag.
+	var tag *Token
+	if tok.kind == TK_IDENT {
+		tag = tok
+		tok = tok.next
+	}
+
+	if tag != nil && !tok.equal("{") {
+		ty = findTag(tag)
+		if ty == nil {
+			failTok(tag, "unknown enum type")
+		}
+		if ty.kind != TY_ENUM {
+			failTok(tag, "not an enum tag")
+		}
+		*rest = tok
+		return ty
+	}
+
+	tok = tok.skip("{")
+
+	// Read an enum-list.
+	i := 0
+	val := 0
+	for !tok.equal("}") {
+		if i > 0 {
+			tok = tok.skip(",")
+		}
+		i++
+
+		name := getIdent(tok)
+		tok = tok.next
+
+		if tok.equal("=") {
+			val = int(getNumber(tok.next))
+			tok = tok.next.next
+		}
+
+		sc := pushScope(name)
+		sc.enumty = ty
+		sc.enumval = val
+		val++
+	}
+
+	*rest = tok.next
+
+	if tag != nil {
+		pushTagScope(tag, ty)
+	}
+	return ty
+}
+
 // declaration = declspec (declarator ("=" expr)? ("," declarator ("=" expr)?)*)? ";"
 func declaration(rest **Token, tok *Token, basety *Type) *Node {
 	head := Node{}
@@ -523,7 +587,7 @@ func declaration(rest **Token, tok *Token, basety *Type) *Node {
 
 var typenames = []string{
 	"void", "_Bool", "char", "short", "int", "long", "struct", "union",
-	"typedef",
+	"typedef", "enum",
 }
 
 // Returns true if a given token represents a type.
@@ -1110,13 +1174,21 @@ func primary(rest **Token, tok *Token) *Node {
 			return funcall(rest, tok)
 		}
 
-		// Variable
+		// Variable or enum constant
 		sc := findVar(tok)
-		if sc == nil || sc.vara == nil {
+		if sc == nil || (sc.vara == nil && sc.enumty == nil) {
 			failTok(tok, "undefined variable")
 		}
+
+		var node *Node
+		if sc.vara != nil {
+			node = NewVarNode(sc.vara, tok)
+		} else {
+			node = NewNum(int64(sc.enumval), tok)
+		}
+
 		*rest = tok.next
-		return NewVarNode(sc.vara, tok)
+		return node
 	}
 
 	if tok.kind == TK_STR {

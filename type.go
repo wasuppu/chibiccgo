@@ -17,6 +17,7 @@ const (
 	TY_SHORT
 	TY_INT
 	TY_LONG
+	TY_ENUM
 	TY_PTR
 	TY_FUNC
 	TY_ARRAY
@@ -58,7 +59,7 @@ func newType(kind TypeKind, size int, align int) *Type {
 func (ty Type) isInteger() bool {
 	k := ty.kind
 	return k == TY_BOOL || k == TY_CHAR || k == TY_SHORT ||
-		k == TY_INT || k == TY_LONG
+		k == TY_INT || k == TY_LONG || k == TY_ENUM
 }
 
 func copyType(ty *Type) *Type {
@@ -78,6 +79,10 @@ func arrayOf(base *Type, len int) *Type {
 	ty.base = base
 	ty.arrayLen = len
 	return ty
+}
+
+func enumType() *Type {
+	return newType(TY_ENUM, 4, 4)
 }
 
 func getCommonType(ty1, ty2 *Type) *Type {
