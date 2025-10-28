@@ -9,6 +9,7 @@ import (
 )
 
 var cachemap HashMap
+var includeGuardMap HashMap
 
 var condIncl *CondIncl
 var macros HashMap
@@ -804,11 +805,73 @@ func readIncludeFilename(rest **Token, tok *Token, isDquote *bool) string {
 	return ""
 }
 
+// Detect the following "include guard" pattern.
+//
+//	#ifndef FOO_H
+//	#define FOO_H
+//	...
+//	#endif
+func detectIncludeGuard(tok *Token) string {
+	// Detect the first two lines.
+	if !isHash(tok) || !tok.next.equal("ifndef") {
+		return ""
+	}
+	tok = tok.next.next
+
+	if tok.kind != TK_IDENT {
+		return ""
+	}
+
+	macro := tok.lexeme
+	tok = tok.next
+
+	if !isHash(tok) || !tok.next.equal("define") || !tok.next.next.equal(macro) {
+		return ""
+	}
+
+	// Read until the end of the file.
+	for tok.kind != TK_EOF {
+		if !isHash(tok) {
+			tok = tok.next
+			continue
+		}
+
+		if tok.next.equal("endif") && tok.next.next.kind == TK_EOF {
+			return macro
+		}
+
+		if tok.equal("if") || tok.equal("ifdef") || tok.equal("ifndef") {
+			tok = skipCondIncl(tok.next)
+		} else {
+			tok = tok.next
+		}
+	}
+	return ""
+}
+
 func includeFile(tok *Token, path string, filenameTok *Token) *Token {
+	// If we read the same file before, and if the file was guarded
+	// by the usual #ifndef ... #endif pattern, we may be able to
+	// skip the file without opening it.
+	var guardName string
+	result := hashmapGet(&includeGuardMap, path)
+	if result != nil {
+		guardName = result.(string)
+		if hashmapGet(&macros, guardName) != nil {
+			return tok
+		}
+	}
+
 	tok2 := tokenizeFile(path)
 	if tok2 == nil {
 		failTok(filenameTok, "cannot open file: %s", path)
 	}
+
+	guardName = detectIncludeGuard(tok2)
+	if len(guardName) > 0 {
+		hashmapPut(&includeGuardMap, path, guardName)
+	}
+
 	return tok2.append(tok)
 }
 
