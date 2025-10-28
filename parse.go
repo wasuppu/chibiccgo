@@ -645,7 +645,14 @@ func stmt(rest **Token, tok *Token) *Node {
 		node := NewNode(ND_FOR, tok)
 		tok = tok.next.skip("(")
 
-		node.init = exprStmt(&tok, tok)
+		enterScope()
+
+		if isTypename(tok) {
+			basety := declspec(&tok, tok, nil)
+			node.init = declaration(&tok, tok, basety)
+		} else {
+			node.init = exprStmt(&tok, tok)
+		}
 
 		if !tok.equal(";") {
 			node.cond = expr(&tok, tok)
@@ -658,6 +665,7 @@ func stmt(rest **Token, tok *Token) *Node {
 		tok = tok.skip(")")
 
 		node.then = stmt(rest, tok)
+		leaveScope()
 		return node
 	}
 
