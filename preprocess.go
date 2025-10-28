@@ -9,7 +9,7 @@ import (
 )
 
 var condIncl *CondIncl
-var macros *Macro
+var macros HashMap
 
 type MacroParam struct {
 	next *MacroParam
@@ -31,13 +31,11 @@ type Hideset struct {
 type MacroHandlerFn func(*Token) *Token
 
 type Macro struct {
-	next       *Macro
 	name       string
 	isObjlike  bool // Object-like or function-like
 	params     *MacroParam
 	vaArgsName string
 	body       *Token
-	deleted    bool
 	handler    MacroHandlerFn
 }
 
@@ -335,16 +333,12 @@ func findMacro(tok *Token) *Macro {
 		return nil
 	}
 
-	for m := macros; m != nil; m = m.next {
-		if len(m.name) == tok.len && m.name == tok.lexeme {
-			if m.deleted {
-				return nil
-			} else {
-				return m
-			}
-		}
+	result := hashmapGet2(&macros, []byte(tok.lexeme), tok.len)
+	var macro *Macro
+	if result != nil {
+		macro = result.(*Macro)
 	}
-	return nil
+	return macro
 }
 
 func readMacroParams(rest **Token, tok *Token, vaArgsName *string) *MacroParam {
@@ -383,12 +377,11 @@ func readMacroParams(rest **Token, tok *Token, vaArgsName *string) *MacroParam {
 
 func addMacro(name string, isObjlike bool, body *Token) *Macro {
 	m := &Macro{
-		next:      macros,
 		name:      name,
 		isObjlike: isObjlike,
 		body:      body,
 	}
-	macros = m
+	hashmapPut(&macros, name, m)
 	return m
 }
 
@@ -1007,8 +1000,7 @@ func defineMacro(name, buf string) {
 }
 
 func undefMacro(name string) {
-	m := addMacro(name, true, nil)
-	m.deleted = true
+	hashmapDelete(&macros, name)
 }
 
 func addBuiltin(name string, fn MacroHandlerFn) *Macro {
