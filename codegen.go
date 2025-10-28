@@ -594,6 +594,67 @@ func (a X64) copyRetBuffer(vara *Obj) {
 	}
 }
 
+func (a X64) copyStructReg() {
+	ty := currentGenFn.ty.returnTy
+	gp, fp := 0, 0
+
+	println("  mov %%rax, %%rdi")
+
+	if hasFlonum(ty, 0, 8, 0) {
+		assert(ty.size == 4 || 8 <= ty.size)
+		if ty.size == 4 {
+			println("  movss (%%rdi), %%xmm0")
+		} else {
+			println("  movsd (%%rdi), %%xmm0")
+		}
+		fp++
+	} else {
+		println("  mov $0, %%rax")
+		for i := min(8, ty.size) - 1; i >= 0; i-- {
+			println("  shl $8, %%rax")
+			println("  mov %d(%%rdi), %%al", i)
+		}
+		gp++
+	}
+
+	if ty.size > 8 {
+		if hasFlonum(ty, 8, 16, 0) {
+			assert(ty.size == 12 || ty.size == 16)
+			if ty.size == 4 {
+				println("  movss 8(%%rdi), %%xmm%d", fp)
+			} else {
+				println("  movsd 8(%%rdi), %%xmm%d", fp)
+			}
+		} else {
+			var reg1, reg2 string
+			if gp == 0 {
+				reg1 = "%al"
+				reg2 = "%rax"
+			} else {
+				reg1 = "%dl"
+				reg2 = "%rdx"
+			}
+			println("  mov $0, %s", reg2)
+			for i := min(16, ty.size) - 1; i >= 8; i-- {
+				println("  shl $8, %s", reg2)
+				println("  mov %d(%%rdi), %s", i, reg1)
+			}
+		}
+	}
+}
+
+func (a X64) copyStructMem() {
+	ty := currentGenFn.ty.returnTy
+	vara := currentGenFn.params
+
+	println("  mov %d(%%rbp), %%rdi", vara.offset)
+
+	for i := 0; i < ty.size; i++ {
+		println("  mov %d(%%rax), %%dl", i)
+		println("  mov %%dl, %d(%%rdi)", i)
+	}
+}
+
 // Compute the absolute address of a given node.
 // It's an error if a given node does not reside in memory.
 func (a X64) genAddr(node *Node) {
@@ -1109,7 +1170,17 @@ func (a X64) genStmt(node *Node) {
 	case ND_RETURN:
 		if node.lhs != nil {
 			a.genExpr(node.lhs)
+
+			ty := node.lhs.ty
+			if ty.kind == TY_STRUCT || ty.kind == TY_UNION {
+				if ty.size <= 16 {
+					a.copyStructReg()
+				} else {
+					a.copyStructMem()
+				}
+			}
 		}
+
 		println("  jmp .L.return.%s", currentGenFn.name)
 		return
 	case ND_EXPR_STMT:
@@ -1704,6 +1775,67 @@ func (a RiscV) copyRetBuffer(vara *Obj) {
 	}
 }
 
+func (a RiscV) copyStructReg() {
+	ty := currentGenFn.ty.returnTy
+	gp, fp := 0, 0
+
+	println("  mv t1, a0")
+	setFloStMemsTy(&ty, gp, fp)
+
+	if ty.fsReg1Ty.isFlonum() || ty.fsReg2Ty.isFlonum() {
+		off := 0
+		rtys := []*Type{ty.fsReg1Ty, ty.fsReg2Ty}
+		for i := 0; i < 2; i++ {
+			switch rtys[i].kind {
+			case TY_FLOAT:
+				println("  flw fa%d, %d(t1)", fp, off)
+				fp++
+				off = 4
+			case TY_DOUBLE:
+				println("  fld fa%d, %d(t1)", fp, off)
+				fp++
+				off = 8
+			case TY_VOID:
+			default:
+				println("  ld a%d, %d(t1)", gp, off)
+				gp++
+			}
+		}
+		return
+	}
+
+	for off := 0; off < ty.size; off += 8 {
+		switch ty.size - off {
+		case 1:
+			println("  lb a%d, %d(t1)", gp, off)
+			gp++
+		case 2:
+			println("  lh a%d, %d(t1)", gp, off)
+			gp++
+		case 3, 4:
+			println("  lw a%d, %d(t1)", gp, off)
+			gp++
+		default:
+			println("  ld a%d, %d(t1)", gp, off)
+			gp++
+		}
+	}
+}
+
+func (a RiscV) copyStructMem() {
+	ty := currentGenFn.ty.returnTy
+	vara := currentGenFn.params
+
+	println("  li t0, %d", vara.offset)
+	println("  add t0, fp, t0")
+	println("  ld t1, 0(t0)")
+
+	for i := 0; i < ty.size; i++ {
+		println("  lb t0, %d(a0)", I)
+		println("  sb t0, %d(t1)", I)
+	}
+}
+
 // Compute the absolute address of a given node.
 // It's an error if a given node does not reside in memory.
 func (a RiscV) genAddr(node *Node) {
@@ -2225,6 +2357,15 @@ func (a RiscV) genStmt(node *Node) {
 	case ND_RETURN:
 		if node.lhs != nil {
 			a.genExpr(node.lhs)
+
+			ty := node.lhs.ty
+			if ty.kind == TY_STRUCT || ty.kind == TY_UNION {
+				if ty.size <= 16 {
+					a.copyStructReg()
+				} else {
+					a.copyStructMem()
+				}
+			}
 		}
 		println("  j .L.return.%s", currentGenFn.name)
 		return

@@ -1301,7 +1301,11 @@ func stmt(rest **Token, tok *Token) *Node {
 		*rest = tok.skip(";")
 
 		exp.addType()
-		node.lhs = NewCast(exp, currentParseFn.ty.returnTy)
+		ty := currentParseFn.ty.returnTy
+		if ty.kind != TY_STRUCT && ty.kind != TY_UNION {
+			exp = NewCast(exp, currentParseFn.ty.returnTy)
+		}
+		node.lhs = exp
 		return node
 	}
 
@@ -2679,6 +2683,14 @@ func function(tok *Token, basety *Type, attr *VarAttr) *Token {
 	locals = nil
 	enterScope()
 	createParamLvars(ty.params)
+
+	// A buffer for a struct/union return value is passed
+	// as the hidden first parameter.
+	rty := ty.returnTy
+	if (rty.kind == TY_STRUCT || rty.kind == TY_UNION) && rty.size > 16 {
+		NewLVar("", pointerTo(rty))
+	}
+
 	fn.params = locals
 	if ty.isVariadic {
 		switch ArchName {
