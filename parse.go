@@ -437,17 +437,19 @@ func getIdent(tok *Token) string {
 }
 
 const (
-	VOID  = 1 << 0
-	BOOL  = 1 << 2
-	CHAR  = 1 << 4
-	SHORT = 1 << 6
-	INT   = 1 << 8
-	LONG  = 1 << 10
-	OTHER = 1 << 12
+	VOID   = 1 << 0
+	BOOL   = 1 << 2
+	CHAR   = 1 << 4
+	SHORT  = 1 << 6
+	INT    = 1 << 8
+	LONG   = 1 << 10
+	OTHER  = 1 << 12
+	SIGNED = 1 << 13
 )
 
 // declspec = ("void" | "_Bool" | "char" | "short" | "int" | "long"
 // | "typedef" | "static" | "extern"
+// | "signed"
 // | struct-decl | union-decl | typedef-name
 // | enum-specifier)+
 func declspec(rest **Token, tok *Token, attr *VarAttr) *Type {
@@ -526,6 +528,8 @@ func declspec(rest **Token, tok *Token, attr *VarAttr) *Type {
 			counter += INT
 		} else if tok.equal("long") {
 			counter += LONG
+		} else if tok.equal("signed") {
+			counter |= SIGNED
 		} else {
 			unreachable()
 		}
@@ -535,15 +539,21 @@ func declspec(rest **Token, tok *Token, attr *VarAttr) *Type {
 			ty = tyVoid
 		case BOOL:
 			ty = tyBool
-		case CHAR:
+		case CHAR, SIGNED + CHAR:
 			ty = tyChar
-		case SHORT, SHORT + INT:
+		case SHORT, SHORT + INT,
+			SIGNED + SHORT,
+			SIGNED + SHORT + INT:
 			ty = tyShort
-		case INT:
+		case INT, SIGNED, SIGNED + INT:
 			ty = tyInt
 		case LONG, LONG + INT,
 			LONG + LONG,
-			LONG + LONG + INT:
+			LONG + LONG + INT,
+			SIGNED + LONG,
+			SIGNED + LONG + INT,
+			SIGNED + LONG + LONG,
+			SIGNED + LONG + LONG + INT:
 			ty = tyLong
 		default:
 			failTok(tok, "invalid type")
@@ -1165,7 +1175,7 @@ func gvarInitializer(rest **Token, tok *Token, vara *Obj) {
 
 var typenames = []string{
 	"void", "_Bool", "char", "short", "int", "long", "struct", "union",
-	"typedef", "enum", "static", "extern", "_Alignas",
+	"typedef", "enum", "static", "extern", "_Alignas", "signed",
 }
 
 // Returns true if a given token represents a type.
