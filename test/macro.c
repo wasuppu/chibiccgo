@@ -422,6 +422,26 @@ int main() {
 #define M31(x, y) (1, ##x y)
   ASSERT(3, M31(, 3));
 
+  // c253
+#define M14(args...) 3
+  ASSERT(3, M14());
+
+#define M14(args...) args
+  ASSERT(2, M14() 2);
+  ASSERT(5, M14(5));
+
+#define M14(args...) add2(args)
+  ASSERT(8, M14(2, 6));
+
+#define M14(args...) add6(1,2,args,6)
+  ASSERT(21, M14(3,4,5));
+
+#define M14(x, args...) add6(1,2,x,args,6)
+  ASSERT(21, M14(3,4,5));
+
+#define M14(x, args...) x
+  ASSERT(5, M14(5));
+
   printf("OK\n");
   return 0;
 }
