@@ -265,6 +265,11 @@ func parseArgs(args []string) {
 		fail("no input files")
 	}
 
+	// -E implies that the input is the C macro language.
+	if optE {
+		optX = FILE_C
+	}
+
 	if len(optMarch) == 0 {
 		optMarch = "x64"
 	}
