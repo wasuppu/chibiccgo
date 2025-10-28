@@ -347,6 +347,20 @@ func (a X64) genExpr(node *Node) {
 			println("  add $8, %%rsp")
 		}
 
+		// It looks like the most significant 48 or 56 bits in RAX may
+		// contain garbage if a function return type is short or bool/char,
+		// respectively. We clear the upper bits here.
+		switch node.ty.kind {
+		case TY_BOOL:
+			println("  movzx %%al, %%eax")
+			return
+		case TY_CHAR:
+			println("  movsbl %%al, %%eax")
+			return
+		case TY_SHORT:
+			println("  movswl %%ax, %%eax")
+			return
+		}
 		return
 	}
 
@@ -856,6 +870,23 @@ func (a RiscV) genExpr(node *Node) {
 			println("  addi sp, sp, 8")
 		}
 
+		// It looks like the most significant 48 or 56 bits in RAX may
+		// contain garbage if a function return type is short or bool/char,
+		// respectively. We clear the upper bits here.
+		switch node.ty.kind {
+		case TY_BOOL:
+			println("  slli a0, a0, 63")
+			println("  srli a0, a0, 63")
+			return
+		case TY_CHAR:
+			println("  slli a0, a0, 56")
+			println("  srai a0, a0, 56")
+			return
+		case TY_SHORT:
+			println("  slli a0, a0, 48")
+			println("  srai a0, a0, 48")
+			return
+		}
 		return
 	}
 

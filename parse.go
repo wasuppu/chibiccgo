@@ -555,7 +555,7 @@ func declspec(rest **Token, tok *Token, attr *VarAttr) *Type {
 	return ty
 }
 
-// func-params = ("void" | param ("," param)*)? ")"
+// func-params = ("void" | param ("," param)*?)? ")"
 // param       = declspec declarator
 func funcParams(rest **Token, tok *Token, ty *Type) *Type {
 	if tok.equal("void") && tok.next.equal(")") {
