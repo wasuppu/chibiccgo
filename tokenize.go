@@ -494,7 +494,6 @@ func tokenize(filename string, input string) *Token {
 
 	cur.next = NewToken(TK_EOF, p, 0, "")
 	addLineNumbers(head.next)
-	convertKeywords(head.next)
 	return head.next
 }
 
