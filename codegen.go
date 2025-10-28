@@ -33,8 +33,13 @@ func (a X64) pop(arg string) {
 
 // Generate code for a given node.
 func (a X64) genExpr(node *Node) {
-	if node.kind == ND_NUM {
+	switch node.kind {
+	case ND_NUM:
 		fmt.Printf("  mov $%d, %%rax\n", node.val)
+		return
+	case ND_NEG:
+		a.genExpr(node.lhs)
+		fmt.Printf("  neg %%rax\n")
 		return
 	}
 
@@ -87,8 +92,13 @@ func (a RiscV) pop(arg string) {
 
 // Generate code for a given node.
 func (a RiscV) genExpr(node *Node) {
-	if node.kind == ND_NUM {
+	switch node.kind {
+	case ND_NUM:
 		fmt.Printf("  li a0, %d\n", node.val)
+		return
+	case ND_NEG:
+		a.genExpr(node.lhs)
+		fmt.Printf("  neg a0, a0\n")
 		return
 	}
 

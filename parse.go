@@ -8,6 +8,7 @@ const (
 	ND_SUB                 // -
 	ND_MUL                 // *
 	ND_DIV                 // /
+	ND_NEG                 // unary -
 	ND_NUM                 // Integer
 )
 
@@ -32,6 +33,12 @@ func NewBinary(kind NodeKind, lhs, rhs *Node) *Node {
 		lhs:  lhs,
 		rhs:  rhs,
 	}
+}
+
+func NewUnary(kind NodeKind, expr *Node) *Node {
+	node := NewNode(kind)
+	node.lhs = expr
+	return node
 }
 
 func NewNum(val int) *Node {
@@ -61,24 +68,38 @@ func expr(rest **Token, tok *Token) *Node {
 	}
 }
 
-// mul = primary ("*" primary | "/" primary)*
+// mul = unary ("*" unary | "/" unary)*
 func mul(rest **Token, tok *Token) *Node {
-	node := primary(&tok, tok)
+	node := unary(&tok, tok)
 
 	for {
 		if tok.equal("*") {
-			node = NewBinary(ND_MUL, node, primary(&tok, tok.next))
+			node = NewBinary(ND_MUL, node, unary(&tok, tok.next))
 			continue
 		}
 
 		if tok.equal("/") {
-			node = NewBinary(ND_DIV, node, primary(&tok, tok.next))
+			node = NewBinary(ND_DIV, node, unary(&tok, tok.next))
 			continue
 		}
 
 		*rest = tok
 		return node
 	}
+}
+
+// unary = ("+" | "-") unary
+// | primary
+func unary(rest **Token, tok *Token) *Node {
+	if tok.equal("+") {
+		return unary(rest, tok.next)
+	}
+
+	if tok.equal("-") {
+		return NewUnary(ND_NEG, unary(rest, tok.next))
+	}
+
+	return primary(rest, tok)
 }
 
 // primary = "(" expr ")" | num
