@@ -56,6 +56,9 @@ const (
 	ND_DIV                       // /
 	ND_NEG                       // unary -
 	ND_MOD                       // %
+	ND_BITAND                    // &
+	ND_BITOR                     // |
+	ND_BITXOR                    // ^
 	ND_EQ                        // ==
 	ND_NE                        // !=
 	ND_LT                        // <
@@ -770,10 +773,10 @@ func toAssign(binary *Node) *Node {
 	return NewBinary(ND_COMMA, expr1, expr2, tok)
 }
 
-// assign    = equality (assign-op assign)?
-// assign-op = "=" | "+=" | "-=" | "*=" | "/=" | "%="
+// assign    = bitor (assign-op assign)?
+// assign-op = "=" | "+=" | "-=" | "*=" | "/=" | "%=" | "&=" | "|=" | "^="
 func assign(rest **Token, tok *Token) *Node {
-	node := equality(&tok, tok)
+	node := bitor(&tok, tok)
 
 	if tok.equal("=") {
 		return NewBinary(ND_ASSIGN, node, assign(rest, tok.next), tok)
@@ -799,6 +802,51 @@ func assign(rest **Token, tok *Token) *Node {
 		return toAssign(NewBinary(ND_MOD, node, assign(rest, tok.next), tok))
 	}
 
+	if tok.equal("&=") {
+		return toAssign(NewBinary(ND_BITAND, node, assign(rest, tok.next), tok))
+	}
+
+	if tok.equal("|=") {
+		return toAssign(NewBinary(ND_BITOR, node, assign(rest, tok.next), tok))
+	}
+
+	if tok.equal("^=") {
+		return toAssign(NewBinary(ND_BITXOR, node, assign(rest, tok.next), tok))
+	}
+
+	*rest = tok
+	return node
+}
+
+// bitor = bitxor ("|" bitxor)*
+func bitor(rest **Token, tok *Token) *Node {
+	node := bitxor(&tok, tok)
+	for tok.equal("|") {
+		start := tok
+		node = NewBinary(ND_BITOR, node, bitxor(&tok, tok.next), start)
+	}
+	*rest = tok
+	return node
+}
+
+// bitxor = bitand ("^" bitand)*
+func bitxor(rest **Token, tok *Token) *Node {
+	node := bitand(&tok, tok)
+	for tok.equal("^") {
+		start := tok
+		node = NewBinary(ND_BITXOR, node, bitand(&tok, tok.next), start)
+	}
+	*rest = tok
+	return node
+}
+
+// bitand = equality ("&" equality)*
+func bitand(rest **Token, tok *Token) *Node {
+	node := equality(&tok, tok)
+	for tok.equal("&") {
+		start := tok
+		node = NewBinary(ND_BITAND, node, equality(&tok, tok.next), start)
+	}
 	*rest = tok
 	return node
 }

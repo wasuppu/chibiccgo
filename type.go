@@ -134,7 +134,8 @@ func (node *Node) addType() {
 			node.ty = tyLong
 		}
 		return
-	case ND_ADD, ND_SUB, ND_MUL, ND_DIV, ND_MOD:
+	case ND_ADD, ND_SUB, ND_MUL, ND_DIV,
+		ND_MOD, ND_BITAND, ND_BITOR, ND_BITXOR:
 		usualArithConv(&node.lhs, &node.rhs)
 		node.ty = node.lhs.ty
 		return

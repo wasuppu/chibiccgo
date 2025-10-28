@@ -329,6 +329,15 @@ func (a X64) genExpr(node *Node) {
 			println("  mov %%rdx, %%rax")
 		}
 		return
+	case ND_BITAND:
+		println("  and %%rdi, %%rax")
+		return
+	case ND_BITOR:
+		println("  or %%rdi, %%rax")
+		return
+	case ND_BITXOR:
+		println("  xor %%rdi, %%rax")
+		return
 	case ND_EQ, ND_NE, ND_LT, ND_LE:
 		println("  cmp %s, %s", di, ax)
 
@@ -673,6 +682,15 @@ func (a RiscV) genExpr(node *Node) {
 		return
 	case ND_MOD:
 		println("  rem%s a0, a0, a1", suffix)
+		return
+	case ND_BITAND:
+		println("  and a0, a0, a1")
+		return
+	case ND_BITOR:
+		println("  or a0, a0, a1")
+		return
+	case ND_BITXOR:
+		println("  xor a0, a0, a1")
 		return
 	case ND_EQ, ND_NE:
 		println("  xor a0, a0, a1")
