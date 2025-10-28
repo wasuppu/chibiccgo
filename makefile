@@ -17,13 +17,9 @@ chibicc:
 
 # Stage 1
 
-test/macro.exe: chibicc test/macro.c
-	./chibicc -march=$(ARCH) -c -o test/macro.o test/macro.c
-	$(CC) -o $@ test/macro.o -xc test/common
-
 $(TEST_DIR)/%.exe: chibicc test/%.c
 	mkdir -p $(TEST_DIR)
-	$(CC) -o- -E -P -C test/$*.c | ./chibicc -march=$(ARCH) -c -o $(TEST_DIR)/$*.o -
+	./chibicc -march=$(ARCH) -c -o $(TEST_DIR)/$*.o test/$*.c
 	$(CC) $(FLAG) -o $@ $(TEST_DIR)/$*.o -xc test/common
 
 test: $(TESTS)
@@ -44,14 +40,9 @@ stage2/%.o: chibicc self.py ./source/%.c
 	./self.py ./source/chibicc.h ./source/$*.c > stage2/$*.c
 	./chibicc -march=$(ARCH) -c -o stage2/$*.o stage2/$*.c
 
-stage2/test/macro.exe: stage2/chibicc test/macro.c
-	mkdir -p stage2/test
-	./stage2/chibicc -c -o stage2/test/macro.o test/macro.c
-	gcc -o $@ stage2/test/macro.o -xc test/common
-
 stage2/test/%.exe: stage2/chibicc test/%.c
 	mkdir -p stage2/test
-	gcc -o- -E -P -C test/$*.c | $(RUN) ./stage2/chibicc -c -o stage2/test/$*.o -
+	$(RUN) ./stage2/chibicc -c -o stage2/test/$*.o test/$*.c
 	gcc -o $@ stage2/test/$*.o -xc test/common
 
 test-stage2: $(patsubst $(TEST_DIR)/%.exe,stage2/test/%.exe,$(TESTS))

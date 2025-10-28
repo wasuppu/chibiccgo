@@ -217,9 +217,8 @@ func readEscapedChar(newPos *int, p int) byte {
 // Find a closing double-quote.
 func stringLiteralEnd(p int) int {
 	start := p
-	sourceLen := len(source)
 	for ; source[p] != '"'; p++ {
-		if source[p] == '\n' || p == sourceLen {
+		if source[p] == '\n' || source[p] == '\x00' {
 			failAt(start, "unclosed string literal")
 		}
 		if source[p] == '\\' {
@@ -257,7 +256,7 @@ func readStringLiteral(start int) *Token {
 
 func readCharLiteral(start int) *Token {
 	p := start + 1
-	if p == len(source) {
+	if source[p] == '\x00' {
 		failAt(start, "unclosed char literal")
 	}
 
@@ -311,7 +310,7 @@ func readIntLiteral(start int) *Token {
 		p += 3
 		u = true
 		l = true
-	} else if strings.ToLower(source[p:p+2]) == "lu" || strings.ToLower(source[p:p+2]) == "ul" {
+	} else if strings.HasPrefix(strings.ToLower(source[p:]), "lu") || strings.HasPrefix(strings.ToLower(source[p:]), "ul") {
 		p += 2
 		u = true
 		l = true
@@ -437,7 +436,7 @@ func addLineNumbers(tok *Token) {
 		}
 
 		p++
-		if p >= len(source) {
+		if p >= len(source)-1 {
 			break
 		}
 	}
@@ -540,6 +539,11 @@ func tokenize(file *File) *Token {
 			continue
 		}
 
+		if input[p] == '\x00' {
+			p++
+			continue
+		}
+
 		failAt(p, "invalid token")
 	}
 
@@ -578,12 +582,13 @@ func tokenizeFile(path string) *Token {
 	if len(p) == 0 {
 		return nil
 	}
-	file := newFile(path, fileno+1, p)
 
 	// Save the filename for assembler .file directive.
+	file := newFile(path, fileno+1, p+"\x00")
 	inputfiles = append(inputfiles, make([]*File, fileno+2-len(inputfiles))...)
 	inputfiles[fileno] = file
 	inputfiles[fileno+1] = nil
+
 	fileno++
 
 	return tokenize(file)

@@ -432,7 +432,7 @@ func stringize(hash *Token, arg *Token) *Token {
 // Concatenate two tokens to create a new token.
 func paste(lhs, rhs *Token) *Token {
 	// Paste the two tokens.
-	buf := fmt.Sprintf("%.*s%.*s", lhs.len, lhs.lexeme, rhs.len, rhs.lexeme)
+	buf := fmt.Sprintf("%.*s%.*s\x00", lhs.len, lhs.lexeme, rhs.len, rhs.lexeme)
 
 	// Tokenize the resulting string.
 	tok := tokenize(newFile(lhs.file.name, lhs.file.fileno, buf))
