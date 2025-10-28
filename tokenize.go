@@ -12,7 +12,7 @@ import (
 var source string
 var currentInputLoc int
 
-var kws = []string{"return", "if", "else", "for", "while"}
+var kws = []string{"return", "if", "else", "for", "while", "int"}
 
 // Token
 type TokenKind int
@@ -56,6 +56,15 @@ func (tok Token) skip(op string) *Token {
 		failTok(&tok, "expected '%s'", op)
 	}
 	return tok.next
+}
+
+func consume(rest **Token, tok *Token, str string) bool {
+	if tok.equal(str) {
+		*rest = tok.next
+		return true
+	}
+	*rest = tok
+	return false
 }
 
 // Returns true if c is valid as the first character of an identifier.

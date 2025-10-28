@@ -8,6 +8,7 @@ var locals *Obj
 type Obj struct {
 	next   *Obj
 	name   string // Variable name
+	ty     *Type  // Type
 	offset int    // Offset from RBP
 }
 
@@ -114,10 +115,72 @@ func NewVarNode(vara *Obj, tok *Token) *Node {
 	return node
 }
 
-func NewLVar(name string) *Obj {
-	vara := &Obj{name: name, next: locals}
+func NewLVar(name string, ty *Type) *Obj {
+	vara := &Obj{name: name, ty: ty, next: locals}
 	locals = vara
 	return vara
+}
+
+func getIdent(tok *Token) string {
+	if tok.kind != TK_IDENT {
+		failTok(tok, "expected an identifier")
+	}
+	return tok.lexeme
+}
+
+// declspec = "int"
+func declspec(rest **Token, tok *Token) *Type {
+	*rest = tok.skip("int")
+	return tyInt
+}
+
+// declarator = "*"* ident
+func declarator(rest **Token, tok *Token, ty *Type) *Type {
+	for consume(&tok, tok, "*") {
+		ty = pointerTo(ty)
+	}
+
+	if tok.kind != TK_IDENT {
+		failTok(tok, "expected a variable name")
+	}
+
+	ty.name = tok
+	*rest = tok.next
+	return ty
+}
+
+// declaration = declspec (declarator ("=" expr)? ("," declarator ("=" expr)?)*)? ";"
+func declaration(rest **Token, tok *Token) *Node {
+	basety := declspec(&tok, tok)
+
+	head := Node{}
+	cur := &head
+	i := 0
+
+	for !tok.equal(";") {
+		if i > 0 {
+			tok = tok.skip(",")
+		}
+		i++
+
+		ty := declarator(&tok, tok, basety)
+		vara := NewLVar(getIdent(ty.name), ty)
+
+		if !tok.equal("=") {
+			continue
+		}
+
+		lhs := NewVarNode(vara, ty.name)
+		rhs := assign(&tok, tok.next)
+		node := NewBinary(ND_ASSIGN, lhs, rhs, tok)
+		cur.next = NewUnary(ND_EXPR_STMT, node, tok)
+		cur = cur.next
+	}
+
+	node := NewNode(ND_BLOCK, tok)
+	node.body = head.next
+	*rest = tok.next
+	return node
 }
 
 // stmt = "return" expr ";"
@@ -183,15 +246,20 @@ func stmt(rest **Token, tok *Token) *Node {
 	return exprStmt(rest, tok)
 }
 
-// compound-stmt = stmt* "}"
+// compound-stmt = (declaration | stmt)* "}"
 func compoundStmt(rest **Token, tok *Token) *Node {
 	node := NewNode(ND_BLOCK, tok)
 
 	head := Node{}
 	cur := &head
 	for !tok.equal("}") {
-		cur.next = stmt(&tok, tok)
-		cur = cur.next
+		if tok.equal("int") {
+			cur.next = declaration(&tok, tok)
+			cur = cur.next
+		} else {
+			cur.next = stmt(&tok, tok)
+			cur = cur.next
+		}
 		cur.addType()
 	}
 
@@ -419,7 +487,7 @@ func primary(rest **Token, tok *Token) *Node {
 	if tok.kind == TK_IDENT {
 		vara := findVar(tok)
 		if vara == nil {
-			vara = NewLVar(tok.lexeme)
+			failTok(tok, "undefined variable")
 		}
 		*rest = tok.next
 		return NewVarNode(vara, tok)

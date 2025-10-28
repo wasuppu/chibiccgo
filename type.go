@@ -11,7 +11,12 @@ const (
 
 type Type struct {
 	kind TypeKind
+
+	// Pointer
 	base *Type
+
+	// Declaration
+	name *Token
 }
 
 func (ty Type) isInteger() bool {
@@ -46,18 +51,20 @@ func (node *Node) addType() {
 	case ND_ADD, ND_SUB, ND_MUL, ND_DIV, ND_NEG, ND_ASSIGN:
 		node.ty = node.lhs.ty
 		return
-	case ND_EQ, ND_NE, ND_LT, ND_LE, ND_VAR, ND_NUM:
+	case ND_EQ, ND_NE, ND_LT, ND_LE, ND_NUM:
 		node.ty = tyInt
+		return
+	case ND_VAR:
+		node.ty = node.vara.ty
 		return
 	case ND_ADDR:
 		node.ty = pointerTo(node.lhs.ty)
 		return
 	case ND_DEREF:
-		if node.lhs.ty.kind == TY_PTR {
-			node.ty = node.lhs.ty.base
-		} else {
-			node.ty = tyInt
+		if node.lhs.ty.kind != TY_PTR {
+			failTok(node.tok, "invalid pointer dereference")
 		}
+		node.ty = node.lhs.ty.base
 		return
 	}
 }
