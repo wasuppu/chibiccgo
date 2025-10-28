@@ -8,6 +8,8 @@ import (
 	"time"
 )
 
+var cachemap HashMap
+
 var condIncl *CondIncl
 var macros HashMap
 
@@ -740,12 +742,19 @@ func searchIncludePaths(filename string) string {
 		return filename
 	}
 
+	cached := hashmapGet(&cachemap, filename)
+	if cached != nil {
+		return cached.(string)
+	}
+
 	// Search a file from the include paths.
 	for i := 0; i < len(includePaths); i++ {
 		path := filepath.Join(includePaths[i], filename)
-		if fileExists(path) {
-			return path
+		if !fileExists(path) {
+			continue
 		}
+		hashmapPut(&cachemap, filename, path)
+		return path
 	}
 
 	return ""
