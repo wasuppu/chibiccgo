@@ -45,8 +45,10 @@ const (
 type Node struct {
 	kind NodeKind // Node kind
 	next *Node    // Next node
-	lhs  *Node    // Left-hand side
-	rhs  *Node    // Right-hand side
+	tok  *Token   // Representative token
+
+	lhs *Node // Left-hand side
+	rhs *Node // Right-hand side
 
 	// "if" or "for" statement
 	cond *Node
@@ -73,35 +75,38 @@ func findVar(tok *Token) *Obj {
 }
 
 // Create a new AST node.
-func NewNode(kind NodeKind) *Node {
+func NewNode(kind NodeKind, tok *Token) *Node {
 	return &Node{
 		kind: kind,
+		tok:  tok,
 	}
 }
 
-func NewBinary(kind NodeKind, lhs, rhs *Node) *Node {
+func NewBinary(kind NodeKind, lhs, rhs *Node, tok *Token) *Node {
 	return &Node{
 		kind: kind,
+		tok:  tok,
 		lhs:  lhs,
 		rhs:  rhs,
 	}
 }
 
-func NewUnary(kind NodeKind, expr *Node) *Node {
-	node := NewNode(kind)
+func NewUnary(kind NodeKind, expr *Node, tok *Token) *Node {
+	node := NewNode(kind, tok)
 	node.lhs = expr
 	return node
 }
 
-func NewNum(val int) *Node {
+func NewNum(val int, tok *Token) *Node {
 	return &Node{
 		kind: ND_NUM,
+		tok:  tok,
 		val:  val,
 	}
 }
 
-func NewVarNode(vara *Obj) *Node {
-	node := NewNode(ND_VAR)
+func NewVarNode(vara *Obj, tok *Token) *Node {
+	node := NewNode(ND_VAR, tok)
 	node.vara = vara
 	return node
 }
@@ -120,13 +125,14 @@ func NewLVar(name string) *Obj {
 // | expr-stmt
 func stmt(rest **Token, tok *Token) *Node {
 	if tok.equal("return") {
-		node := NewUnary(ND_RETURN, expr(&tok, tok.next))
+		node := NewNode(ND_RETURN, tok)
+		node.lhs = expr(&tok, tok.next)
 		*rest = tok.skip(";")
 		return node
 	}
 
 	if tok.equal("if") {
-		node := NewNode(ND_IF)
+		node := NewNode(ND_IF, tok)
 		tok = tok.next.skip("(")
 		node.cond = expr(&tok, tok)
 		tok = tok.skip(")")
@@ -139,7 +145,7 @@ func stmt(rest **Token, tok *Token) *Node {
 	}
 
 	if tok.equal("for") {
-		node := NewNode(ND_FOR)
+		node := NewNode(ND_FOR, tok)
 		tok = tok.next.skip("(")
 
 		node.init = exprStmt(&tok, tok)
@@ -159,7 +165,7 @@ func stmt(rest **Token, tok *Token) *Node {
 	}
 
 	if tok.equal("while") {
-		node := NewNode(ND_FOR)
+		node := NewNode(ND_FOR, tok)
 		tok = tok.next.skip("(")
 		node.cond = expr(&tok, tok)
 		tok = tok.skip(")")
@@ -176,6 +182,8 @@ func stmt(rest **Token, tok *Token) *Node {
 
 // compound-stmt = stmt* "}"
 func compoundStmt(rest **Token, tok *Token) *Node {
+	node := NewNode(ND_BLOCK, tok)
+
 	head := Node{}
 	cur := &head
 	for !tok.equal("}") {
@@ -183,7 +191,6 @@ func compoundStmt(rest **Token, tok *Token) *Node {
 		cur = cur.next
 	}
 
-	node := NewNode(ND_BLOCK)
 	node.body = head.next
 	*rest = tok.next
 	return node
@@ -193,10 +200,11 @@ func compoundStmt(rest **Token, tok *Token) *Node {
 func exprStmt(rest **Token, tok *Token) *Node {
 	if tok.equal(";") {
 		*rest = tok.next
-		return NewNode(ND_BLOCK)
+		return NewNode(ND_BLOCK, tok)
 	}
 
-	node := NewUnary(ND_EXPR_STMT, expr(&tok, tok))
+	node := NewNode(ND_EXPR_STMT, tok)
+	node.lhs = expr(&tok, tok)
 	*rest = tok.skip(";")
 	return node
 }
@@ -209,9 +217,11 @@ func expr(rest **Token, tok *Token) *Node {
 // assign = equality ("=" assign)?
 func assign(rest **Token, tok *Token) *Node {
 	node := equality(&tok, tok)
+
 	if tok.equal("=") {
-		node = NewBinary(ND_ASSIGN, node, assign(&tok, tok.next))
+		return NewBinary(ND_ASSIGN, node, assign(rest, tok.next), tok)
 	}
+
 	*rest = tok
 	return node
 }
@@ -221,13 +231,15 @@ func equality(rest **Token, tok *Token) *Node {
 	node := relational(&tok, tok)
 
 	for {
+		start := tok
+
 		if tok.equal("==") {
-			node = NewBinary(ND_EQ, node, relational(&tok, tok.next))
+			node = NewBinary(ND_EQ, node, relational(&tok, tok.next), start)
 			continue
 		}
 
 		if tok.equal("!=") {
-			node = NewBinary(ND_NE, node, relational(&tok, tok.next))
+			node = NewBinary(ND_NE, node, relational(&tok, tok.next), start)
 			continue
 		}
 
@@ -241,23 +253,25 @@ func relational(rest **Token, tok *Token) *Node {
 	node := add(&tok, tok)
 
 	for {
+		start := tok
+
 		if tok.equal("<") {
-			node = NewBinary(ND_LT, node, add(&tok, tok.next))
+			node = NewBinary(ND_LT, node, add(&tok, tok.next), start)
 			continue
 		}
 
 		if tok.equal("<=") {
-			node = NewBinary(ND_LE, node, add(&tok, tok.next))
+			node = NewBinary(ND_LE, node, add(&tok, tok.next), start)
 			continue
 		}
 
 		if tok.equal(">") {
-			node = NewBinary(ND_LT, add(&tok, tok.next), node)
+			node = NewBinary(ND_LT, add(&tok, tok.next), node, start)
 			continue
 		}
 
 		if tok.equal(">=") {
-			node = NewBinary(ND_LE, add(&tok, tok.next), node)
+			node = NewBinary(ND_LE, add(&tok, tok.next), node, start)
 			continue
 		}
 
@@ -271,13 +285,15 @@ func add(rest **Token, tok *Token) *Node {
 	node := mul(&tok, tok)
 
 	for {
+		start := tok
+
 		if tok.equal("+") {
-			node = NewBinary(ND_ADD, node, mul(&tok, tok.next))
+			node = NewBinary(ND_ADD, node, mul(&tok, tok.next), start)
 			continue
 		}
 
 		if tok.equal("-") {
-			node = NewBinary(ND_SUB, node, mul(&tok, tok.next))
+			node = NewBinary(ND_SUB, node, mul(&tok, tok.next), start)
 			continue
 		}
 
@@ -291,13 +307,15 @@ func mul(rest **Token, tok *Token) *Node {
 	node := unary(&tok, tok)
 
 	for {
+		start := tok
+
 		if tok.equal("*") {
-			node = NewBinary(ND_MUL, node, unary(&tok, tok.next))
+			node = NewBinary(ND_MUL, node, unary(&tok, tok.next), start)
 			continue
 		}
 
 		if tok.equal("/") {
-			node = NewBinary(ND_DIV, node, unary(&tok, tok.next))
+			node = NewBinary(ND_DIV, node, unary(&tok, tok.next), start)
 			continue
 		}
 
@@ -314,7 +332,7 @@ func unary(rest **Token, tok *Token) *Node {
 	}
 
 	if tok.equal("-") {
-		return NewUnary(ND_NEG, unary(rest, tok.next))
+		return NewUnary(ND_NEG, unary(rest, tok.next), tok)
 	}
 
 	return primary(rest, tok)
@@ -334,11 +352,11 @@ func primary(rest **Token, tok *Token) *Node {
 			vara = NewLVar(tok.lexeme)
 		}
 		*rest = tok.next
-		return NewVarNode(vara)
+		return NewVarNode(vara, tok)
 	}
 
 	if tok.kind == TK_NUM {
-		node := NewNum(tok.val)
+		node := NewNum(tok.val, tok)
 		*rest = tok.next
 		return node
 	}

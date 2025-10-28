@@ -61,7 +61,7 @@ func (a X64) genAddr(node *Node) {
 		return
 	}
 
-	fail("not an lvalue")
+	failTok(node.tok, "not an lvalue")
 }
 
 // Generate code for a given node.
@@ -124,7 +124,7 @@ func (a X64) genExpr(node *Node) {
 		return
 	}
 
-	fail("invalid expression")
+	failTok(node.tok, "invalid expression")
 }
 
 func (a X64) genStmt(node *Node) {
@@ -174,7 +174,7 @@ func (a X64) genStmt(node *Node) {
 		return
 	}
 
-	fail("invalid statement")
+	failTok(node.tok, "invalid statement")
 }
 
 type RiscV struct{}
@@ -218,7 +218,7 @@ func (a RiscV) genAddr(node *Node) {
 		return
 	}
 
-	fail("not an lvalue")
+	failTok(node.tok, "not an lvalue")
 }
 
 // Generate code for a given node.
@@ -281,7 +281,7 @@ func (a RiscV) genExpr(node *Node) {
 		return
 	}
 
-	fail("invalid expression")
+	failTok(node.tok, "invalid expression")
 }
 
 func (a RiscV) genStmt(node *Node) {
@@ -329,7 +329,7 @@ func (a RiscV) genStmt(node *Node) {
 		return
 	}
 
-	fail("invalid statement")
+	failTok(node.tok, "invalid statement")
 }
 
 func codegen(arch string, prog *Function) {
