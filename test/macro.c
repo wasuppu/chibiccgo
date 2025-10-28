@@ -404,6 +404,9 @@ int main() {
   // c248
   ASSERT(24, strlen(__TIMESTAMP__));
 
+  // c249
+  ASSERT(0, strcmp(__BASE_FILE__, "test/macro.c"));
+
   printf("OK\n");
   return 0;
 }
