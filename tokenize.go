@@ -78,6 +78,7 @@ type Token struct {
 	atBol    bool      // True if this token is at beginning of line
 	hasSpace bool      // True if this token follows a space character
 	hideset  *Hideset  // For macro expansion
+	origin   *Token    // If this is expanded from a macro, the original token
 }
 
 // Create a new token.

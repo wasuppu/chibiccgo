@@ -25,6 +25,8 @@ type Hideset struct {
 	name string
 }
 
+type MacroHandlerFn func(*Token) *Token
+
 type Macro struct {
 	next      *Macro
 	name      string
@@ -32,6 +34,7 @@ type Macro struct {
 	params    *MacroParam
 	body      *Token
 	deleted   bool
+	handler   MacroHandlerFn
 }
 
 type Ctx int
@@ -212,7 +215,7 @@ func quotaString(str string) string {
 }
 
 func newStrToken(str string, tmpl *Token) *Token {
-	buf := quotaString(str)
+	buf := quotaString(str + "\x00")
 	return tokenize(newFile(tmpl.file.name, tmpl.file.fileno, buf))
 }
 
@@ -610,10 +613,20 @@ func expandMacro(rest **Token, tok *Token) bool {
 		return false
 	}
 
+	// Built-in dynamic macro application such as __LINE__
+	if m.handler != nil {
+		*rest = m.handler(tok)
+		(*rest).next = tok.next
+		return true
+	}
+
 	// Object-like macro application
 	if m.isObjlike {
 		hs := hidesetUnion(tok.hideset, newHideset(m.name))
 		body := addHideset(m.body, hs)
+		for t := body; t.kind != TK_EOF; t = t.next {
+			t.origin = tok
+		}
 		*rest = body.append(tok.next)
 		(*rest).atBol = tok.atBol
 		(*rest).hasSpace = tok.hasSpace
@@ -636,6 +649,9 @@ func expandMacro(rest **Token, tok *Token) bool {
 
 	body := subst(m.body, args)
 	body = addHideset(body, hs)
+	for t := body; t.kind != TK_EOF; t = t.next {
+		t.origin = macroToken
+	}
 	*rest = body.append(tok.next)
 	(*rest).atBol = macroToken.atBol
 	(*rest).hasSpace = macroToken.hasSpace
@@ -866,6 +882,26 @@ func defineMacro(name, buf string) {
 	addMacro(name, true, tok)
 }
 
+func addBuiltin(name string, fn MacroHandlerFn) *Macro {
+	m := addMacro(name, true, nil)
+	m.handler = fn
+	return m
+}
+
+func fileMacro(tmpl *Token) *Token {
+	for tmpl.origin != nil {
+		tmpl = tmpl.origin
+	}
+	return newStrToken(tmpl.file.name, tmpl)
+}
+
+func lineMacro(tmpl *Token) *Token {
+	for tmpl.origin != nil {
+		tmpl = tmpl.origin
+	}
+	return newNumToken(tmpl.lineno, tmpl)
+}
+
 func (a X64) initMacro() {
 	// Define predefined macros
 	defineMacro("_LP64", "1")
@@ -909,6 +945,9 @@ func (a X64) initMacro() {
 	defineMacro("__x86_64__", "1")
 	defineMacro("linux", "1")
 	defineMacro("unix", "1")
+
+	addBuiltin("__FILE__", fileMacro)
+	addBuiltin("__LINE__", lineMacro)
 }
 
 func (a RiscV) initMacro() {
@@ -959,6 +998,9 @@ func (a RiscV) initMacro() {
 	defineMacro("__riscv_div", "1")
 	defineMacro("__riscv_float_abi_double", "1")
 	defineMacro("__riscv_flen", "64")
+
+	addBuiltin("__FILE__", fileMacro)
+	addBuiltin("__LINE__", lineMacro)
 }
 
 // Entry point function of the preprocessor.
