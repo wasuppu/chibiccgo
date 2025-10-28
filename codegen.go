@@ -221,6 +221,7 @@ func (a X64) prologue(fname string, stackSize int, isStatic bool) {
 	}
 
 	println("  .text")
+	println("  .type %s, @function", fname)
 	println("%s:", fname)
 
 	println("  push %%rbp")
@@ -1411,7 +1412,6 @@ func (a X64) emitData(prog *Obj) {
 		} else {
 			align = vara.align
 		}
-		println("  .align %d", align)
 
 		// Common symbol
 		if optFcommon && vara.isTentative {
@@ -1427,6 +1427,9 @@ func (a X64) emitData(prog *Obj) {
 				println("  .data")
 			}
 
+			println("  .type %s, @object", vara.name)
+			println("  .size %s, %d", vara.name, vara.ty.size)
+			println("  .align %d", align)
 			println("%s:", vara.name)
 
 			rel := vara.rel
@@ -1451,6 +1454,7 @@ func (a X64) emitData(prog *Obj) {
 			println("  .bss")
 		}
 
+		println("  .align %d", align)
 		println("%s:", vara.name)
 		println("  .zero %d", vara.ty.size)
 	}
