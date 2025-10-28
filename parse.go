@@ -135,8 +135,13 @@ func compoundStmt(rest **Token, tok *Token) *Node {
 	return node
 }
 
-// expr-stmt = expr ";"
+// expr-stmt = expr? ";"
 func exprStmt(rest **Token, tok *Token) *Node {
+	if tok.equal(";") {
+		*rest = tok.next
+		return NewNode(ND_BLOCK)
+	}
+
 	node := NewUnary(ND_EXPR_STMT, expr(&tok, tok))
 	*rest = tok.skip(";")
 	return node

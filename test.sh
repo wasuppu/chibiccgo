@@ -84,4 +84,7 @@ assert 8 '{ foo123=3; bar=5; return foo123+bar; }'
 # c13
 assert 3 '{ {1; {2;} return 3;} }'
 
+# c14
+assert 5 '{ ;;; return 5; }'
+
 echo OK
