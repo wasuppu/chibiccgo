@@ -76,8 +76,13 @@ type Arch interface {
 
 type X64 struct{}
 
-func (a X64) prologue(fname string, stackSize int) {
-	println("  .globl %s", fname)
+func (a X64) prologue(fname string, stackSize int, isStatic bool) {
+	if isStatic {
+		println("  .local %s", fname)
+	} else {
+		println("  .globl %s", fname)
+	}
+
 	println("  .text")
 	println("%s:", fname)
 
@@ -390,7 +395,7 @@ func (a X64) emitText(prog *Obj) {
 		}
 
 		// Prologue
-		a.prologue(fn.name, fn.stackSize)
+		a.prologue(fn.name, fn.stackSize, fn.isStatic)
 		currentGenFn = fn
 
 		// Save passed-by-register arguments to the stack
@@ -411,8 +416,13 @@ func (a X64) emitText(prog *Obj) {
 
 type RiscV struct{}
 
-func (a RiscV) prologue(fname string, stackSize int) {
-	println("  .globl %s", fname)
+func (a RiscV) prologue(fname string, stackSize int, isStatic bool) {
+	if isStatic {
+		println("  .local %s", fname)
+	} else {
+		println("  .globl %s", fname)
+	}
+
 	println("  .text")
 	println("%s:", fname)
 
@@ -718,7 +728,7 @@ func (a RiscV) emitText(prog *Obj) {
 		}
 
 		// Prologue
-		a.prologue(fn.name, fn.stackSize)
+		a.prologue(fn.name, fn.stackSize, fn.isStatic)
 		currentGenFn = fn
 
 		// Save passed-by-register arguments to the stack

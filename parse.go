@@ -34,6 +34,7 @@ type Obj struct {
 	// Global variable or function
 	isFunction   bool
 	isDefinition bool
+	isStatic     bool
 
 	// Global variable
 	initData string
@@ -128,6 +129,7 @@ type TagScope struct {
 // Variable attributes such as typedef or extern.
 type VarAttr struct {
 	isTypedef bool
+	isStatic  bool
 }
 
 // Represents a block scope.
@@ -318,7 +320,7 @@ const (
 )
 
 // declspec = ("void" | "_Bool" | "char" | "short" | "int" | "long"
-// | "typedef"
+// | "typedef" | "static"
 // | struct-decl | union-decl | typedef-name
 // | enum-specifier)+
 func declspec(rest **Token, tok *Token, attr *VarAttr) *Type {
@@ -326,12 +328,21 @@ func declspec(rest **Token, tok *Token, attr *VarAttr) *Type {
 	counter := 0
 
 	for isTypename(tok) {
-		// Handle "typedef" keyword
-		if tok.equal("typedef") {
+		// Handle storage class specifiers.
+		if tok.equal("typedef") || tok.equal("static") {
 			if attr == nil {
 				failTok(tok, "storage class specifier is not allowed in this context")
 			}
-			attr.isTypedef = true
+
+			if tok.equal("typedef") {
+				attr.isTypedef = true
+			} else {
+				attr.isStatic = true
+			}
+
+			if attr.isTypedef && attr.isStatic {
+				failTok(tok, "typedef and static may not be used together")
+			}
 			tok = tok.next
 			continue
 		}
@@ -587,7 +598,7 @@ func declaration(rest **Token, tok *Token, basety *Type) *Node {
 
 var typenames = []string{
 	"void", "_Bool", "char", "short", "int", "long", "struct", "union",
-	"typedef", "enum",
+	"typedef", "enum", "static",
 }
 
 // Returns true if a given token represents a type.
@@ -1229,12 +1240,13 @@ func createParamLvars(param *Type) {
 	}
 }
 
-func function(tok *Token, basety *Type) *Token {
+func function(tok *Token, basety *Type, attr *VarAttr) *Token {
 	ty := declarator(&tok, tok, basety)
 
 	fn := NewGVar(getIdent(ty.name), ty)
 	fn.isFunction = true
 	fn.isDefinition = !consume(&tok, tok, ";")
+	fn.isStatic = attr.isStatic
 
 	if !fn.isDefinition {
 		return tok
@@ -1296,7 +1308,7 @@ func parse(tok *Token) *Obj {
 
 		// Function
 		if isFunction(tok) {
-			tok = function(tok, basety)
+			tok = function(tok, basety, &attr)
 			continue
 		}
 
