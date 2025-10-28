@@ -9,9 +9,10 @@ var condIncl *CondIncl
 var macros *Macro
 
 type Macro struct {
-	next *Macro
-	name string
-	body *Token
+	next    *Macro
+	name    string
+	body    *Token
+	deleted bool
 }
 
 type Ctx int
@@ -161,7 +162,11 @@ func findMacro(tok *Token) *Macro {
 
 	for m := macros; m != nil; m = m.next {
 		if len(m.name) == tok.len && m.name == tok.lexeme {
-			return m
+			if m.deleted {
+				return nil
+			} else {
+				return m
+			}
 		}
 	}
 	return nil
@@ -243,6 +248,19 @@ func preprocess2(tok *Token) *Token {
 			}
 			name := tok.lexeme
 			addMacro(name, copyLine(&tok, tok.next))
+			continue
+		}
+
+		if tok.equal("undef") {
+			tok = tok.next
+			if tok.kind != TK_IDENT {
+				failTok(tok, "macro name must be an identifier")
+			}
+			name := tok.lexeme
+			tok = skipLine(tok.next)
+
+			m := addMacro(name, nil)
+			m.deleted = true
 			continue
 		}
 
