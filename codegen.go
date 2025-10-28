@@ -1334,7 +1334,14 @@ func (a X64) emitData(prog *Obj) {
 		} else {
 			println("  .globl %s", vara.name)
 		}
-		println("  .align %d", vara.align)
+
+		var align int
+		if vara.ty.kind == TY_ARRAY && vara.ty.size >= 16 {
+			align = max(16, vara.align)
+		} else {
+			align = vara.align
+		}
+		println("  .align %d", align)
 
 		if len(vara.initData) > 0 {
 			println("  .data")
@@ -2672,8 +2679,19 @@ func (a X64) assignLVarOffsets(prog *Obj) {
 				continue
 			}
 
+			// AMD64 System V ABI has a special alignment rule for an array of
+			// length at least 16 bytes. We need to align such array to at least
+			// 16-byte boundaries. See p.14 of
+			// https://github.com/hjl-tools/x86-psABI/wiki/x86-64-psABI-draft.pdf.
+			var align int
+			if vara.ty.kind == TY_ARRAY && vara.ty.size >= 16 {
+				align = max(16, vara.align)
+			} else {
+				align = vara.align
+			}
+
 			bottom += vara.ty.size
-			bottom = alignTo(bottom, vara.align)
+			bottom = alignTo(bottom, align)
 			vara.offset = -bottom
 		}
 
