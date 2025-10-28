@@ -338,7 +338,15 @@ func (a X64) genExpr(node *Node) {
 		}
 
 		println("  mov $0, %%rax")
-		println("  call %s", node.funcname)
+
+		if depth%2 == 0 {
+			println("  call %s", node.funcname)
+		} else {
+			println("  sub $8, %%rsp")
+			println("  call %s", node.funcname)
+			println("  add $8, %%rsp")
+		}
+
 		return
 	}
 
@@ -840,7 +848,14 @@ func (a RiscV) genExpr(node *Node) {
 			a.pop(argRegR[i])
 		}
 
-		println("  call %s", node.funcname)
+		if depth%2 == 0 {
+			println("  call %s", node.funcname)
+		} else {
+			println("  addi sp, sp, -8")
+			println("  call %s", node.funcname)
+			println("  addi sp, sp, 8")
+		}
+
 		return
 	}
 
