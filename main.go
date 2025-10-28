@@ -32,6 +32,7 @@ var optMarch string
 var basefile string
 var outfile string
 
+var ldExtraArgs []string
 var optInclude []string
 var inputPaths []string
 var tmpfiles []string
@@ -220,6 +221,11 @@ func parseArgs(args []string) {
 
 		if strings.HasPrefix(args[i], "-l") {
 			inputPaths = append(inputPaths, args[i])
+			continue
+		}
+
+		if args[i] == "-s" {
+			ldExtraArgs = append(ldExtraArgs, "-s")
 			continue
 		}
 
@@ -578,6 +584,10 @@ func (a X64) runLinker(inputs []string, output string) {
 	arr = append(arr, "-L/usr/lib/x86_64-redhat-linux")
 	arr = append(arr, "-L/usr/lib")
 	arr = append(arr, "-L/lib")
+
+	for i := 0; i < len(ldExtraArgs); i++ {
+		arr = append(arr, ldExtraArgs[i])
+	}
 
 	arr = append(arr, inputs...)
 
