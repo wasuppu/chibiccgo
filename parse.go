@@ -967,6 +967,7 @@ func cast(rest **Token, tok *Token) *Node {
 }
 
 // unary = ("+" | "-" | "*" | "&") cast
+// | ("++" | "--") unary
 // | postfix
 func unary(rest **Token, tok *Token) *Node {
 	if tok.equal("+") {
@@ -983,6 +984,16 @@ func unary(rest **Token, tok *Token) *Node {
 
 	if tok.equal("*") {
 		return NewUnary(ND_DEREF, cast(rest, tok.next), tok)
+	}
+
+	// Read ++i as i+=1
+	if tok.equal("++") {
+		return toAssign(newAdd(unary(rest, tok.next), NewNum(1, tok), tok))
+	}
+
+	// Read --i as i-=1
+	if tok.equal("--") {
+		return toAssign(newSub(unary(rest, tok.next), NewNum(1, tok), tok))
 	}
 
 	return postfix(rest, tok)
