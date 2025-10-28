@@ -178,6 +178,7 @@ const (
 	ND_CAST                      // Type cast
 	ND_MEMZERO                   // Zero-clear a stack variable
 	ND_ASM                       // "asm"
+	ND_CAS                       // Atomic compare-and-swap
 )
 
 // AST node type
@@ -228,6 +229,11 @@ type Node struct {
 
 	// "asm" string literal
 	asmStr string
+
+	// Atomic compare-and-swap
+	casAddr *Node
+	casOld  *Node
+	casNew  *Node
 
 	// Variable
 	vara *Obj
@@ -3264,6 +3270,18 @@ func primary(rest **Token, tok *Token) *Node {
 			}
 			return NewNum(2, start)
 		}
+	}
+
+	if tok.equal("__builtin_compare_and_swap") {
+		node := NewNode(ND_CAS, tok)
+		tok = tok.next.skip("(")
+		node.casAddr = assign(&tok, tok)
+		tok = tok.skip(",")
+		node.casOld = assign(&tok, tok)
+		tok = tok.skip(",")
+		node.casNew = assign(&tok, tok)
+		*rest = tok.skip(")")
+		return node
 	}
 
 	if tok.kind == TK_IDENT {

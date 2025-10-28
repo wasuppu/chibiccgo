@@ -700,6 +700,36 @@ func (a X64) copyStructMem() {
 	}
 }
 
+func (a X64) regDx(sz int) string {
+	switch sz {
+	case 1:
+		return "%dl"
+	case 2:
+		return "%dx"
+	case 4:
+		return "%edx"
+	case 8:
+		return "%rdx"
+	}
+	unreachable()
+	return ""
+}
+
+func (a X64) regAx(sz int) string {
+	switch sz {
+	case 1:
+		return "%al"
+	case 2:
+		return "%ax"
+	case 4:
+		return "%eax"
+	case 8:
+		return "%rax"
+	}
+	unreachable()
+	return ""
+}
+
 // Compute the absolute address of a given node.
 // It's an error if a given node does not reside in memory.
 func (a X64) genAddr(node *Node) {
@@ -1100,6 +1130,25 @@ func (a X64) genExpr(node *Node) {
 		return
 	case ND_LABEL_VAL:
 		println("  lea %s(%%rip), %%rax", node.uniqueLabel)
+		return
+	case ND_CAS:
+		a.genExpr(node.casAddr)
+		a.push()
+		a.genExpr(node.casNew)
+		a.push()
+		a.genExpr(node.casOld)
+		println("  mov %%rax, %%r8")
+		a.load(node.casOld.ty.base)
+		a.pop("%rdx") // new
+		a.pop("%rdi") // addr
+
+		sz := node.casAddr.ty.base.size
+		println("  lock cmpxchg %s, (%%rdi)", a.regDx(sz))
+		println("  sete %%cl")
+		println("  je 1f")
+		println("  mov %s, (%%r8)", a.regAx(sz))
+		println("1:")
+		println("  movzbl %%cl, %%eax")
 		return
 	}
 
