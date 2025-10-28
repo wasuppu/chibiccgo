@@ -175,6 +175,22 @@ func parseArgs(args []string) {
 			continue
 		}
 
+		// These options are ignored for now.
+		if strings.HasPrefix(args[i], "-O") ||
+			strings.HasPrefix(args[i], "-W") ||
+			strings.HasPrefix(args[i], "-g") ||
+			strings.HasPrefix(args[i], "-std=") ||
+			args[i] == "-ffreestanding" ||
+			args[i] == "-fno-builtin" ||
+			args[i] == "-fno-omit-frame-pointer" ||
+			args[i] == "-fno-stack-protector" ||
+			args[i] == "-fno-strict-aliasing" ||
+			args[i] == "-m64" ||
+			args[i] == "-mno-red-zone" ||
+			args[i] == "-w" {
+			continue
+		}
+
 		if args[i][0] == '-' && len(args[i]) > 1 {
 			fail("unknown argument: %s", args[i])
 		}
