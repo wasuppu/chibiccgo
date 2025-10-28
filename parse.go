@@ -332,7 +332,7 @@ func NewInitializer(ty *Type, isFlexible bool) *Initializer {
 		return init
 	}
 
-	if ty.kind == TY_STRUCT {
+	if ty.kind == TY_STRUCT || ty.kind == TY_UNION {
 		// Count the number of struct members.
 		len := 0
 		for mem := ty.members; mem != nil; mem = mem.next {
@@ -795,8 +795,17 @@ func structInitializer(rest **Token, tok *Token, init *Initializer) {
 	}
 }
 
+func unionInitializer(rest **Token, tok *Token, init *Initializer) {
+	// Unlike structs, union initializers take only one initializer,
+	// and that initializes the first union member.
+	tok = tok.skip("{")
+	initializer2(&tok, tok, init.children[0])
+	*rest = tok.skip("}")
+}
+
 // initializer = string-initializer | array-initializer
-// | struct-initializer | assign
+// | struct-initializer | union-initializer
+// | assign
 func initializer2(rest **Token, tok *Token, init *Initializer) {
 	if init.ty.kind == TY_ARRAY && tok.kind == TK_STR {
 		stringInitializer(rest, tok, init)
@@ -822,6 +831,11 @@ func initializer2(rest **Token, tok *Token, init *Initializer) {
 		}
 
 		structInitializer(rest, tok, init)
+		return
+	}
+
+	if init.ty.kind == TY_UNION {
+		unionInitializer(rest, tok, init)
 		return
 	}
 
@@ -871,6 +885,11 @@ func createLVarInit(init *Initializer, ty *Type, desg *InitDesg, tok *Token) *No
 			node = NewBinary(ND_COMMA, node, rhs, tok)
 		}
 		return node
+	}
+
+	if ty.kind == TY_UNION {
+		desg2 := InitDesg{next: desg, idx: 0, member: ty.members}
+		return createLVarInit(init.children[0], ty.members.ty, &desg2, tok)
 	}
 
 	if init.expr == nil {
