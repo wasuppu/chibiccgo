@@ -345,6 +345,17 @@ func (a X64) castType(from *Type, to *Type) {
 }
 
 func (a X64) cmpZero(ty *Type) {
+	switch ty.kind {
+	case TY_FLOAT:
+		println("  xorps %%xmm1, %%xmm1")
+		println("  ucomiss %%xmm1, %%xmm0")
+		return
+	case TY_DOUBLE:
+		println("  xorpd %%xmm1, %%xmm1")
+		println("  ucomisd %%xmm1, %%xmm0")
+		return
+	}
+
 	if ty.isInteger() && ty.size <= 4 {
 		println("  cmp $0, %%eax")
 	} else {
@@ -466,7 +477,7 @@ func (a X64) genExpr(node *Node) {
 	case ND_COND:
 		c := count()
 		a.genExpr(node.cond)
-		println("  cmp $0, %%rax")
+		a.cmpZero(node.cond.ty)
 		println("  je .L.else.%d", c)
 		a.genExpr(node.then)
 		println("  jmp .L.end.%d", c)
@@ -476,7 +487,7 @@ func (a X64) genExpr(node *Node) {
 		return
 	case ND_NOT:
 		a.genExpr(node.lhs)
-		println("  cmp $0, %%rax")
+		a.cmpZero(node.lhs.ty)
 		println("  sete %%al")
 		println("  movzx %%al, %%rax")
 		return
@@ -487,10 +498,10 @@ func (a X64) genExpr(node *Node) {
 	case ND_LOGAND:
 		c := count()
 		a.genExpr(node.lhs)
-		println("  cmp $0, %%rax")
+		a.cmpZero(node.lhs.ty)
 		println("  je .L.false.%d", c)
 		a.genExpr(node.rhs)
-		println("  cmp $0, %%rax")
+		a.cmpZero(node.rhs.ty)
 		println("  je .L.false.%d", c)
 		println("  mov $1, %%rax")
 		println("  jmp .L.end.%d", c)
@@ -501,10 +512,10 @@ func (a X64) genExpr(node *Node) {
 	case ND_LOGOR:
 		c := count()
 		a.genExpr(node.lhs)
-		println("  cmp $0, %%rax")
+		a.cmpZero(node.lhs.ty)
 		println("  jne .L.true.%d", c)
 		a.genExpr(node.rhs)
-		println("  cmp $0, %%rax")
+		a.cmpZero(node.rhs.ty)
 		println("  jne .L.true.%d", c)
 		println("  mov $0, %%rax")
 		println("  jmp .L.end.%d", c)
@@ -711,7 +722,7 @@ func (a X64) genStmt(node *Node) {
 	case ND_IF:
 		c := count()
 		a.genExpr(node.cond)
-		println("  cmp $0, %%rax")
+		a.cmpZero(node.cond.ty)
 		println("  je  .L.else.%d", c)
 		a.genStmt(node.then)
 		println("  jmp .L.end.%d", c)
@@ -729,7 +740,7 @@ func (a X64) genStmt(node *Node) {
 		println(".L.begin.%d:", c)
 		if node.cond != nil {
 			a.genExpr(node.cond)
-			println("  cmp $0, %%rax")
+			a.cmpZero(node.cond.ty)
 			println("  je %s", node.brkLabel)
 		}
 		a.genStmt(node.then)
@@ -746,7 +757,7 @@ func (a X64) genStmt(node *Node) {
 		a.genStmt(node.then)
 		println("%s:", node.contLabel)
 		a.genExpr(node.cond)
-		println("  cmp $0, %%rax")
+		a.cmpZero(node.cond.ty)
 		println("  jne .L.begin.%d", c)
 		println("%s:", node.brkLabel)
 		return
@@ -1044,6 +1055,7 @@ func (a RiscV) castType(from *Type, to *Type) {
 	}
 
 	if to.kind == TY_BOOL {
+		a.cmpZero(from)
 		println("  snez a0, a0")
 		return
 	}
@@ -1052,6 +1064,21 @@ func (a RiscV) castType(from *Type, to *Type) {
 	t2 := getTypeId(to)
 	if len(riscvCastTable[t1][t2]) > 0 {
 		println("  %s", riscvCastTable[t1][t2])
+	}
+}
+
+func (a RiscV) cmpZero(ty *Type) {
+	switch ty.kind {
+	case TY_FLOAT:
+		println("  fmv.s.x fa1, zero")
+		println("  feq.s a0, fa0, fa1")
+		println("  xori a0, a0, 1")
+		return
+	case TY_DOUBLE:
+		println("  fmv.d.x fa1, zero")
+		println("  feq.d a0, fa0, fa1")
+		println("  xori a0, a0, 1")
+		return
 	}
 }
 
@@ -1167,6 +1194,7 @@ func (a RiscV) genExpr(node *Node) {
 	case ND_COND:
 		c := count()
 		a.genExpr(node.cond)
+		a.cmpZero(node.cond.ty)
 		println("  beqz a0, .L.else.%d", c)
 		a.genExpr(node.then)
 		println("  j .L.end.%d", c)
@@ -1176,6 +1204,7 @@ func (a RiscV) genExpr(node *Node) {
 		return
 	case ND_NOT:
 		a.genExpr(node.lhs)
+		a.cmpZero(node.lhs.ty)
 		println("  seqz a0, a0")
 		return
 	case ND_BITNOT:
@@ -1185,8 +1214,10 @@ func (a RiscV) genExpr(node *Node) {
 	case ND_LOGAND:
 		c := count()
 		a.genExpr(node.lhs)
+		a.cmpZero(node.lhs.ty)
 		println("  beqz a0, .L.false.%d", c)
 		a.genExpr(node.rhs)
+		a.cmpZero(node.rhs.ty)
 		println("  beqz a0, .L.false.%d", c)
 		println("  li a0, 1")
 		println("  j .L.end.%d", c)
@@ -1197,8 +1228,10 @@ func (a RiscV) genExpr(node *Node) {
 	case ND_LOGOR:
 		c := count()
 		a.genExpr(node.lhs)
+		a.cmpZero(node.lhs.ty)
 		println("  bnez a0, .L.true.%d", c)
 		a.genExpr(node.rhs)
+		a.cmpZero(node.rhs.ty)
 		println("  bnez a0, .L.true.%d", c)
 		println("  li a0, 0")
 		println("  j .L.end.%d", c)
@@ -1399,6 +1432,7 @@ func (a RiscV) genStmt(node *Node) {
 	case ND_IF:
 		c := count()
 		a.genExpr(node.cond)
+		a.cmpZero(node.cond.ty)
 		println("  beqz a0, .L.else.%d", c)
 		a.genStmt(node.then)
 		println("  j .L.end.%d", c)
@@ -1416,6 +1450,7 @@ func (a RiscV) genStmt(node *Node) {
 		println(".L.begin.%d:", c)
 		if node.cond != nil {
 			a.genExpr(node.cond)
+			a.cmpZero(node.cond.ty)
 			println("  beqz a0, %s", node.brkLabel)
 		}
 		a.genStmt(node.then)
@@ -1432,6 +1467,7 @@ func (a RiscV) genStmt(node *Node) {
 		a.genStmt(node.then)
 		println("%s:", node.contLabel)
 		a.genExpr(node.cond)
+		a.cmpZero(node.cond.ty)
 		println("  bnez a0, .L.begin.%d", c)
 		println("%s:", node.brkLabel)
 		return
