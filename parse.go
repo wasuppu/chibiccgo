@@ -967,6 +967,12 @@ func stringInitializer(rest **Token, tok *Token, init *Initializer) {
 //	int x[5][10] = { [5][8]=1, 2, 3 };
 //
 // It sets x[5][8], x[5][9] and x[6][0] to 1, 2 and 3, respectively.
+//
+// Use `.fieldname` to move the cursor for a struct initializer. E.g.
+//
+//	struct { int a, b, c; } x = { .c=5 };
+//
+// The above initializer sets x.c to 5.
 func arrayDesignator(rest **Token, tok *Token, ty *Type) int {
 	start := tok
 	i := int(constExpr(&tok, tok.next))
@@ -977,7 +983,25 @@ func arrayDesignator(rest **Token, tok *Token, ty *Type) int {
 	return i
 }
 
-// designation = ("[" const-expr "]")* "="? initializer
+// struct-designator = "." ident
+func structDesignator(rest **Token, tok *Token, ty *Type) *Member {
+	tok = tok.skip(".")
+	if tok.kind != TK_IDENT {
+		failTok(tok, "expected a field designator")
+	}
+
+	for mem := ty.members; mem != nil; mem = mem.next {
+		if mem.name.lexeme == tok.lexeme {
+			*rest = tok.next
+			return mem
+		}
+	}
+
+	failTok(tok, "struct has no such member")
+	return nil
+}
+
+// designation = ("[" const-expr "]" | "." ident)* "="? initializer
 func designation(rest **Token, tok *Token, init *Initializer) {
 	if tok.equal("[") {
 		if init.ty.kind != TY_ARRAY {
@@ -987,6 +1011,18 @@ func designation(rest **Token, tok *Token, init *Initializer) {
 		designation(&tok, tok, init.children[i])
 		arrayInitializer2(rest, tok, init, i+1)
 		return
+	}
+
+	if tok.equal(".") && init.ty.kind == TY_STRUCT {
+		mem := structDesignator(&tok, tok, init.ty)
+		designation(&tok, tok, init.children[mem.idx])
+		init.expr = nil
+		structInitializer2(rest, tok, init, mem.next)
+		return
+	}
+
+	if tok.equal(".") {
+		failTok(tok, "field name not in struct or union initializer")
 	}
 
 	if tok.equal("=") {
@@ -1076,7 +1112,7 @@ func arrayInitializer2(rest **Token, tok *Token, init *Initializer, i int) {
 			tok = tok.skip(",")
 		}
 
-		if tok.equal("[") {
+		if tok.equal("[") || tok.equal(".") {
 			*rest = start
 			return
 		}
@@ -1091,10 +1127,19 @@ func structInitializer1(rest **Token, tok *Token, init *Initializer) {
 	tok = tok.skip("{")
 
 	mem := init.ty.members
+	first := true
 
 	for !consumeEnd(rest, tok) {
-		if mem != init.ty.members {
+		if !first {
 			tok = tok.skip(",")
+		}
+		first = false
+
+		if tok.equal(".") {
+			mem = structDesignator(&tok, tok, init.ty)
+			designation(&tok, tok, init.children[mem.idx])
+			mem = mem.next
+			continue
 		}
 
 		if mem != nil {
@@ -1107,14 +1152,22 @@ func structInitializer1(rest **Token, tok *Token, init *Initializer) {
 }
 
 // struct-initializer2 = initializer ("," initializer)*
-func structInitializer2(rest **Token, tok *Token, init *Initializer) {
+func structInitializer2(rest **Token, tok *Token, init *Initializer, mem *Member) {
 	first := true
 
-	for mem := init.ty.members; mem != nil && !isEnd(tok); mem = mem.next {
+	for ; mem != nil && !isEnd(tok); mem = mem.next {
+		start := tok
+
 		if !first {
 			tok = tok.skip(",")
 		}
 		first = false
+
+		if tok.equal("[") || tok.equal(".") {
+			*rest = start
+			return
+		}
+
 		initializer2(&tok, tok, init.children[mem.idx])
 	}
 	*rest = tok
@@ -1166,7 +1219,7 @@ func initializer2(rest **Token, tok *Token, init *Initializer) {
 			return
 		}
 
-		structInitializer2(rest, tok, init)
+		structInitializer2(rest, tok, init, init.ty.members)
 		return
 	}
 
