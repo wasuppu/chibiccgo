@@ -25,6 +25,7 @@ var optX FileType
 var optFcommon bool = true
 var optE bool
 var optM bool
+var optMP bool
 var optS bool
 var optC bool
 var optCC1 bool
@@ -253,6 +254,11 @@ func parseArgs(args []string) {
 			continue
 		}
 
+		if args[i] == "-MP" {
+			optMP = true
+			continue
+		}
+
 		if args[i] == "-cc1-input" {
 			i++
 			basefile = args[i]
@@ -440,6 +446,13 @@ func printDependencies() {
 	for i := 0; files[i] != nil; i++ {
 		fmt.Fprintf(out, " \\\n  %s", files[i].name)
 	}
+
+	if optMP {
+		for i := 1; files[i] != nil; i++ {
+			fmt.Fprintf(out, "%s:\n\n", files[i].name)
+		}
+	}
+
 	fmt.Fprintf(out, "\n\n")
 }
 
