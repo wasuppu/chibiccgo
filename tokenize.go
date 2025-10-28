@@ -574,6 +574,44 @@ func readFile(path string) string {
 	return content
 }
 
+// Removes backslashes followed by a newline.
+func removeBackSlashNewline(p []byte) string {
+	i, j := 0, 0
+
+	// We want to keep the number of newline characters so that
+	// the logical line number matches the physical one.
+	// This counter maintain the number of newlines we have removed.
+	n := 0
+
+	for p[i] != '\x00' {
+		if p[i] == '\\' && p[i+1] == '\n' {
+			i += 2
+			n++
+		} else if p[i] == '\n' {
+			p[j] = p[i]
+			j++
+			i++
+			for ; n > 0; n-- {
+				p[j] = '\n'
+				j++
+			}
+		} else {
+			p[j] = p[i]
+			j++
+			i++
+		}
+	}
+
+	for ; n > 0; n-- {
+		p[j] = '\n'
+		j++
+	}
+
+	p[j] = '\x00'
+
+	return string(p[:j+1])
+}
+
 var fileno int
 
 func tokenizeFile(path string) *Token {
@@ -583,8 +621,10 @@ func tokenizeFile(path string) *Token {
 		return nil
 	}
 
+	p = removeBackSlashNewline([]byte(p + "\x00"))
+
 	// Save the filename for assembler .file directive.
-	file := newFile(path, fileno+1, p+"\x00")
+	file := newFile(path, fileno+1, p)
 	inputfiles = append(inputfiles, make([]*File, fileno+2-len(inputfiles))...)
 	inputfiles[fileno] = file
 	inputfiles[fileno+1] = nil

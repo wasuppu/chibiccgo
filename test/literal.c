@@ -95,6 +95,11 @@ int main() {
   ASSERT(8, sizeof(5.l));
   ASSERT(8, sizeof(2.0L));
 
+  // c183
+  assert(1, size\
+of(char), \
+         "sizeof(char)");
+
   printf("OK\n");
   return 0;
 }
