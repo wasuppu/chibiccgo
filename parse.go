@@ -345,13 +345,6 @@ func getIdent(tok *Token) string {
 	return tok.lexeme
 }
 
-func getNumber(tok *Token) int64 {
-	if tok.kind != TK_NUM {
-		failTok(tok, "expected a number")
-	}
-	return tok.val
-}
-
 const (
 	VOID  = 1 << 0
 	BOOL  = 1 << 2
@@ -487,15 +480,15 @@ func funcParams(rest **Token, tok *Token, ty *Type) *Type {
 	return ty
 }
 
-// array-dimensions = num? "]" type-suffix
+// array-dimensions = const-expr? "]" type-suffix
 func arrayDimensions(rest **Token, tok *Token, ty *Type) *Type {
 	if tok.equal("]") {
 		ty = typeSuffix(rest, tok.next, ty)
 		return arrayOf(ty, -1)
 	}
 
-	sz := getNumber(tok)
-	tok = tok.next.skip("]")
+	sz := int32(constExpr(&tok, tok))
+	tok = tok.skip("]")
 	ty = typeSuffix(rest, tok, ty)
 	return arrayOf(ty, int(sz))
 }
@@ -605,8 +598,7 @@ func enumSpecifier(rest **Token, tok *Token) *Type {
 		tok = tok.next
 
 		if tok.equal("=") {
-			val = int(getNumber(tok.next))
-			tok = tok.next.next
+			val = int(int32(constExpr(&tok, tok.next)))
 		}
 
 		sc := pushScope(name)
@@ -680,7 +672,7 @@ func isTypename(tok *Token) bool {
 // stmt = "return" expr ";"
 // | "if" "(" expr ")" stmt ("else" stmt)?
 // | "switch" "(" expr ")" stmt
-// | "case" num ":" stmt
+// | "case" const-expr ":" stmt
 // | "default" ":" stmt
 // | "for" "(" expr-stmt expr? ";" expr? ")" stmt
 // | "while" "(" expr ")" stmt
@@ -738,10 +730,10 @@ func stmt(rest **Token, tok *Token) *Node {
 		if currentSwitch == nil {
 			failTok(tok, "stray case")
 		}
-		val := int32(getNumber(tok.next))
 
 		node := NewNode(ND_CASE, tok)
-		tok = tok.next.next.skip(":")
+		val := int32(constExpr(&tok, tok.next))
+		tok = tok.skip(":")
 		node.label = newUniqueName()
 		node.lhs = stmt(rest, tok)
 		node.val = int64(val)
@@ -925,6 +917,110 @@ func expr(rest **Token, tok *Token) *Node {
 
 	*rest = tok
 	return node
+}
+
+// Evaluate a given node as a constant expression.
+func eval(node *Node) int64 {
+	node.addType()
+
+	switch node.kind {
+	case ND_ADD:
+		return eval(node.lhs) + eval(node.rhs)
+	case ND_SUB:
+		return eval(node.lhs) - eval(node.rhs)
+	case ND_MUL:
+		return eval(node.lhs) * eval(node.rhs)
+	case ND_DIV:
+		return eval(node.lhs) / eval(node.rhs)
+	case ND_NEG:
+		return -eval(node.lhs)
+	case ND_MOD:
+		return eval(node.lhs) % eval(node.rhs)
+	case ND_BITAND:
+		return eval(node.lhs) & eval(node.rhs)
+	case ND_BITOR:
+		return eval(node.lhs) | eval(node.rhs)
+	case ND_BITXOR:
+		return eval(node.lhs) ^ eval(node.rhs)
+	case ND_SHL:
+		return eval(node.lhs) << eval(node.rhs)
+	case ND_SHR:
+		return eval(node.lhs) >> eval(node.rhs)
+	case ND_EQ:
+		if eval(node.lhs) == eval(node.rhs) {
+			return 1
+		} else {
+			return 0
+		}
+	case ND_NE:
+		if eval(node.lhs) != eval(node.rhs) {
+			return 1
+		} else {
+			return 0
+		}
+	case ND_LT:
+		if eval(node.lhs) < eval(node.rhs) {
+			return 1
+		} else {
+			return 0
+		}
+	case ND_LE:
+		if eval(node.lhs) <= eval(node.rhs) {
+			return 1
+		} else {
+			return 0
+		}
+	case ND_COND:
+		if eval(node.cond) != 0 {
+			return eval(node.then)
+		} else {
+			return eval(node.els)
+		}
+	case ND_COMMA:
+		return eval(node.rhs)
+	case ND_NOT:
+		if eval(node.lhs) == 0 {
+			return 1
+		} else {
+			return 0
+		}
+	case ND_BITNOT:
+		return ^eval(node.lhs)
+	case ND_LOGAND:
+		if eval(node.lhs) != 0 && eval(node.rhs) != 0 {
+			return 1
+		} else {
+			return 0
+		}
+	case ND_LOGOR:
+		if eval(node.lhs) != 0 || eval(node.rhs) != 0 {
+			return 1
+		} else {
+			return 0
+		}
+	case ND_CAST:
+		if node.ty.isInteger() {
+			switch node.ty.size {
+			case 1:
+				return int64(uint8(eval(node.lhs)))
+			case 2:
+				return int64(uint16(eval(node.lhs)))
+			case 4:
+				return int64(uint32(eval(node.lhs)))
+			}
+		}
+		return eval(node.lhs)
+	case ND_NUM:
+		return node.val
+	}
+
+	failTok(node.tok, "not a compile-time constant")
+	return -1
+}
+
+func constExpr(rest **Token, tok *Token) int64 {
+	node := conditional(rest, tok)
+	return eval(node)
 }
 
 // Convert `A op= B` to `tmp = &A, *tmp = *tmp op B`
