@@ -23,6 +23,7 @@ const (
 
 var optX FileType
 var optFcommon bool = true
+var optFpic bool
 var optE bool
 var optM bool
 var optMD bool
@@ -328,6 +329,11 @@ func parseArgs(args []string) {
 		if args[i] == "-MMD" {
 			optMMD = true
 			optMD = true
+			continue
+		}
+
+		if args[i] == "-fpic" || args[i] == "-fPIC" {
+			optFpic = true
 			continue
 		}
 

@@ -717,6 +717,21 @@ func (a X64) genAddr(node *Node) {
 			return
 		}
 
+		if optFpic {
+			// Thread-local variable
+			if node.vara.isTls {
+				println("  data16 lea %s@tlsgd(%%rip), %%rdi", node.vara.name)
+				println("  .value 0x6666")
+				println("  rex64")
+				println("  call __tls_get_addr@PLT")
+				return
+			}
+
+			// Function or global variable
+			println("  mov %s@GOTPCREL(%%rip), %%rax", node.vara.name)
+			return
+		}
+
 		// Thread-local variable
 		if node.vara.isTls {
 			println("  mov %%fs:0, %%rax")
