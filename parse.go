@@ -240,19 +240,10 @@ type Node struct {
 // Scope for local variables, global variables, typedefs
 // or enum constants
 type VarScope struct {
-	next    *VarScope
-	name    string
 	vara    *Obj
 	typedef *Type
 	enumty  *Type
 	enumval int
-}
-
-// Scope for struct, union or enum tags
-type TagScope struct {
-	next *TagScope
-	name string
-	ty   *Type
 }
 
 // Variable attributes such as typedef or extern.
@@ -270,8 +261,8 @@ type Scope struct {
 	next *Scope
 	// C has two block scopes; one is for variables and the other is
 	// for struct tags.
-	vars *VarScope
-	tags *TagScope
+	vars HashMap
+	tags HashMap
 }
 
 func alignDown(n, align int) int {
@@ -288,27 +279,21 @@ func leaveScope() {
 }
 
 func pushScope(name string) *VarScope {
-	sc := &VarScope{name: name, next: scope.vars}
-	scope.vars = sc
+	sc := &VarScope{}
+	hashmapPut(&scope.vars, name, sc)
 	return sc
 }
 
 func pushTagScope(tok *Token, ty *Type) {
-	sc := &TagScope{
-		name: tok.lexeme,
-		ty:   ty,
-		next: scope.tags,
-	}
-	scope.tags = sc
+	hashmapPut2(&scope.tags, []byte(tok.lexeme), tok.len, ty)
 }
 
 // Find a variable by name.
 func findVar(tok *Token) *VarScope {
 	for sc := scope; sc != nil; sc = sc.next {
-		for sc2 := sc.vars; sc2 != nil; sc2 = sc2.next {
-			if tok.equal(sc2.name) {
-				return sc2
-			}
+		sc2 := hashmapGet2(&sc.vars, []byte(tok.lexeme), tok.len)
+		if sc2 != nil {
+			return sc2.(*VarScope)
 		}
 	}
 	return nil
@@ -316,10 +301,9 @@ func findVar(tok *Token) *VarScope {
 
 func findTag(tok *Token) *Type {
 	for sc := scope; sc != nil; sc = sc.next {
-		for sc2 := sc.tags; sc2 != nil; sc2 = sc2.next {
-			if tok.equal(sc2.name) {
-				return sc2.ty
-			}
+		ty := hashmapGet2(&sc.tags, []byte(tok.lexeme), tok.len)
+		if ty != nil {
+			return ty.(*Type)
 		}
 	}
 	return nil
@@ -2860,11 +2844,11 @@ func structUnionDecl(rest **Token, tok *Token) *Type {
 	if tag != nil {
 		// If this is a redefinition, overwrite a previous type.
 		// Otherwise, register the struct type.
-		for sc := scope.tags; sc != nil; sc = sc.next {
-			if tag.equal(sc.name) {
-				*sc.ty = *ty
-				return sc.ty
-			}
+		result := hashmapGet2(&scope.tags, []byte(tag.lexeme), tag.len)
+		if result != nil {
+			ty2 := result.(*Type)
+			*ty2 = *ty
+			return ty2
 		}
 
 		pushTagScope(tag, ty)
@@ -3394,8 +3378,10 @@ func findFunc(name string) *Obj {
 		sc = sc.next
 	}
 
-	for sc2 := sc.vars; sc2 != nil; sc2 = sc2.next {
-		if sc2.name == name && sc2.vara != nil && sc2.vara.isFunction {
+	result := hashmapGet(&sc.vars, name)
+	if result != nil {
+		sc2 := result.(*VarScope)
+		if sc2.vara != nil && sc2.vara.isFunction {
 			return sc2.vara
 		}
 	}
