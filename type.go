@@ -1,5 +1,7 @@
 package main
 
+var tyVoid = &Type{kind: TY_VOID, size: 1, align: 1}
+
 var tyChar = &Type{kind: TY_CHAR, size: 1, align: 1}
 var tyShort = &Type{kind: TY_SHORT, size: 2, align: 2}
 var tyInt = &Type{kind: TY_INT, size: 4, align: 4}
@@ -8,7 +10,8 @@ var tyLong = &Type{kind: TY_LONG, size: 8, align: 8}
 type TypeKind int
 
 const (
-	TY_CHAR TypeKind = iota
+	TY_VOID TypeKind = iota
+	TY_CHAR
 	TY_SHORT
 	TY_INT
 	TY_LONG
@@ -131,6 +134,9 @@ func (node *Node) addType() {
 	case ND_DEREF:
 		if node.lhs.ty.base == nil {
 			failTok(node.tok, "invalid pointer dereference")
+		}
+		if node.lhs.ty.base.kind == TY_VOID {
+			failTok(node.tok, "dereferencing a void pointer")
 		}
 		node.ty = node.lhs.ty.base
 		return

@@ -265,8 +265,14 @@ func getNumber(tok *Token) int {
 	return int(tok.val)
 }
 
-// declspec = "char" | "short" | "int" | "long" | struct-decl | union-decl
+// declspec = "void" | "char" | "short" | "int" | "long"
+// | struct-decl | union-decl
 func declspec(rest **Token, tok *Token) *Type {
+	if tok.equal("void") {
+		*rest = tok.next
+		return tyVoid
+	}
+
 	if tok.equal("char") {
 		*rest = tok.next
 		return tyChar
@@ -379,6 +385,10 @@ func declaration(rest **Token, tok *Token) *Node {
 		i++
 
 		ty := declarator(&tok, tok, basety)
+		if ty.kind == TY_VOID {
+			failTok(tok, "variable declared void")
+		}
+
 		vara := NewLVar(getIdent(ty.name), ty)
 
 		if !tok.equal("=") {
@@ -398,10 +408,18 @@ func declaration(rest **Token, tok *Token) *Node {
 	return node
 }
 
+var typenames = []string{
+	"void", "char", "short", "int", "long", "struct", "union",
+}
+
 // Returns true if a given token represents a type.
 func isTypename(tok *Token) bool {
-	return tok.equal("char") || tok.equal("short") || tok.equal("int") ||
-		tok.equal("long") || tok.equal("struct") || tok.equal("union")
+	for i := range typenames {
+		if tok.equal(typenames[i]) {
+			return true
+		}
+	}
+	return false
 }
 
 // stmt = "return" expr ";"
