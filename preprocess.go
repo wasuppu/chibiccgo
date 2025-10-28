@@ -952,6 +952,7 @@ func preprocess2(tok *Token) *Token {
 			}
 
 			path := searchIncludePaths(filename)
+
 			if len(path) > 0 {
 				tok = includeFile(tok, path, start.next.next)
 			} else {
