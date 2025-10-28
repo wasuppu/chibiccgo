@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"path/filepath"
 	"strings"
 )
@@ -428,6 +429,19 @@ func stringize(hash *Token, arg *Token) *Token {
 	return newStrToken(s, hash)
 }
 
+// Concatenate two tokens to create a new token.
+func paste(lhs, rhs *Token) *Token {
+	// Paste the two tokens.
+	buf := fmt.Sprintf("%.*s%.*s", lhs.len, lhs.lexeme, rhs.len, rhs.lexeme)
+
+	// Tokenize the resulting string.
+	tok := tokenize(newFile(lhs.file.name, lhs.file.fileno, buf))
+	if tok.next.kind != TK_EOF {
+		failTok(lhs, "pasting forms '%s', an invalid token", buf)
+	}
+	return tok
+}
+
 // Replace func-like macro parameters with given arguments.
 func subst(tok *Token, args *MacroArg) *Token {
 	head := Token{}
@@ -446,9 +460,63 @@ func subst(tok *Token, args *MacroArg) *Token {
 			continue
 		}
 
+		if tok.equal("##") {
+			if cur == &head {
+				failTok(tok, "'##' cannot appear at start of macro expansion")
+			}
+
+			if tok.next.kind == TK_EOF {
+				failTok(tok, "'##' cannot appear at end of macro expansion")
+			}
+
+			arg := findArg(args, tok.next)
+			if arg != nil {
+				if arg.tok.kind != TK_EOF {
+					*cur = *paste(cur, arg.tok)
+					for t := arg.tok.next; t.kind != TK_EOF; t = t.next {
+						cur.next = copyToken(t)
+						cur = cur.next
+					}
+				}
+				tok = tok.next.next
+				continue
+			}
+
+			*cur = *paste(cur, tok.next)
+			tok = tok.next.next
+			continue
+		}
+
+		arg := findArg(args, tok)
+
+		if arg != nil && tok.next.equal("##") {
+			rhs := tok.next.next
+
+			if arg.tok.kind == TK_EOF {
+				arg2 := findArg(args, rhs)
+				if arg2 != nil {
+					for t := arg2.tok; t.kind != TK_EOF; t = t.next {
+						cur.next = copyToken(t)
+						cur = cur.next
+					}
+				} else {
+					cur.next = copyToken(rhs)
+					cur = cur.next
+				}
+				tok = rhs.next
+				continue
+			}
+
+			for t := arg.tok; t.kind != TK_EOF; t = t.next {
+				cur.next = copyToken(t)
+				cur = cur.next
+			}
+			tok = tok.next
+			continue
+		}
+
 		// Handle a macro token. Macro arguments are completely macro-expanded
 		// before they are substituted into a macro body.
-		arg := findArg(args, tok)
 		if arg != nil {
 			t := preprocess2(arg.tok)
 			for ; t.kind != TK_EOF; t = t.next {
