@@ -572,12 +572,18 @@ func funcall(rest **Token, tok *Token) *Node {
 	return node
 }
 
-// primary = "(" expr ")" | ident func-args? | num
+// primary = "(" expr ")" | "sizeof" unary | ident func-args? | num
 func primary(rest **Token, tok *Token) *Node {
 	if tok.equal("(") {
 		node := expr(&tok, tok.next)
 		*rest = tok.skip(")")
 		return node
+	}
+
+	if tok.equal("sizeof") {
+		node := unary(rest, tok.next)
+		node.addType()
+		return NewNum(node.ty.size, tok)
 	}
 
 	if tok.kind == TK_IDENT {
