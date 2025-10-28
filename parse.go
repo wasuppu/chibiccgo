@@ -69,6 +69,7 @@ type Obj struct {
 	next    *Obj
 	name    string // Variable name
 	ty      *Type  // Type
+	tok     *Token // representative token
 	isLocal bool   // local or global/function
 	align   int    // alignment
 
@@ -707,12 +708,17 @@ func declarator(rest **Token, tok *Token, ty *Type) *Type {
 		return declarator(&tok, start.next, ty)
 	}
 
-	if tok.kind != TK_IDENT {
-		failTok(tok, "expected a variable name")
+	var name *Token
+	namePos := tok
+
+	if tok.kind == TK_IDENT {
+		name = tok
+		tok = tok.next
 	}
 
-	ty = typeSuffix(rest, tok.next, ty)
-	ty.name = tok
+	ty = typeSuffix(rest, tok, ty)
+	ty.name = name
+	ty.namePos = namePos
 	return ty
 }
 
@@ -826,6 +832,9 @@ func declaration(rest **Token, tok *Token, basety *Type, attr *VarAttr) *Node {
 		ty := declarator(&tok, tok, basety)
 		if ty.kind == TY_VOID {
 			failTok(tok, "variable declared void")
+		}
+		if ty.name == nil {
+			failTok(ty.namePos, "variable name omitted")
 		}
 
 		if attr != nil && attr.isStatic {
@@ -2490,6 +2499,9 @@ func parseTypedef(tok *Token, basety *Type) *Token {
 		first = false
 
 		ty := declarator(&tok, tok, basety)
+		if ty.name == nil {
+			failTok(ty.namePos, "typedef name omitted")
+		}
 		pushScope(getIdent(ty.name)).typedef = ty
 	}
 	return tok
@@ -2498,6 +2510,9 @@ func parseTypedef(tok *Token, basety *Type) *Token {
 func createParamLvars(param *Type) {
 	if param != nil {
 		createParamLvars(param.next)
+		if param.name == nil {
+			failTok(param.namePos, "parameter name omitted")
+		}
 		NewLVar(getIdent(param.name), param)
 	}
 }
@@ -2526,6 +2541,9 @@ func resolveGotoLabels() {
 
 func function(tok *Token, basety *Type, attr *VarAttr) *Token {
 	ty := declarator(&tok, tok, basety)
+	if ty.name == nil {
+		failTok(ty.namePos, "function name omitted")
+	}
 
 	fn := NewGVar(getIdent(ty.name), ty)
 	fn.isFunction = true
@@ -2570,6 +2588,9 @@ func globalVariable(tok *Token, basety *Type, attr *VarAttr) *Token {
 		first = false
 
 		ty := declarator(&tok, tok, basety)
+		if ty.name == nil {
+			failTok(ty.namePos, "variable name omitted")
+		}
 		vara := NewGVar(getIdent(ty.name), ty)
 		vara.isDefinition = !attr.isExtern
 		vara.isStatic = attr.isStatic

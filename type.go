@@ -40,7 +40,8 @@ type Type struct {
 	base *Type
 
 	// Declaration
-	name *Token
+	name    *Token
+	namePos *Token
 
 	// Array
 	arrayLen int
