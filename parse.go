@@ -689,14 +689,20 @@ func structDecl(rest **Token, tok *Token) *Type {
 	ty := &Type{}
 	ty.kind = TY_STRUCT
 	structMembers(rest, tok, ty)
+	ty.align = 1
 
 	// Assign offsets within the struct to members.
 	offset := 0
 	for mem := ty.members; mem != nil; mem = mem.next {
+		offset = alignTo(offset, mem.ty.align)
 		mem.offset = offset
 		offset += mem.ty.size
+
+		if ty.align < mem.ty.align {
+			ty.align = mem.ty.align
+		}
 	}
-	ty.size = offset
+	ty.size = alignTo(offset, ty.align)
 
 	return ty
 }

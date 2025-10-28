@@ -1,7 +1,7 @@
 package main
 
-var tyChar = &Type{kind: TY_CHAR, size: 1}
-var tyInt = &Type{kind: TY_INT, size: 8}
+var tyChar = &Type{kind: TY_CHAR, size: 1, align: 1}
+var tyInt = &Type{kind: TY_INT, size: 8, align: 8}
 
 type TypeKind int
 
@@ -15,8 +15,9 @@ const (
 )
 
 type Type struct {
-	kind TypeKind
-	size int // sizeof() value
+	kind  TypeKind
+	size  int // sizeof() value
+	align int // alignment
 
 	// Pointer-to or array-of type.
 	base *Type
@@ -36,6 +37,14 @@ type Type struct {
 	next     *Type
 }
 
+func newType(kind TypeKind, size, align int) *Type {
+	return &Type{
+		kind:  kind,
+		size:  size,
+		align: align,
+	}
+}
+
 func (ty Type) isInteger() bool {
 	return ty.kind == TY_CHAR || ty.kind == TY_INT
 }
@@ -47,20 +56,16 @@ func copyType(ty *Type) *Type {
 }
 
 func pointerTo(base *Type) *Type {
-	return &Type{
-		kind: TY_PTR,
-		size: 8,
-		base: base,
-	}
+	ty := newType(TY_PTR, 8, 8)
+	ty.base = base
+	return ty
 }
 
 func arrayOf(base *Type, len int) *Type {
-	return &Type{
-		kind:     TY_ARRAY,
-		size:     base.size * len,
-		base:     base,
-		arrayLen: len,
-	}
+	ty := newType(TY_ARRAY, base.size*len, base.align)
+	ty.base = base
+	ty.arrayLen = len
+	return ty
 }
 
 func funcType(returnTy *Type) *Type {
