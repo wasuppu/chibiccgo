@@ -8,6 +8,7 @@ var locals *Obj
 
 // Likewise, global variables are accumulated to this list.
 var globals *Obj
+var scope = &Scope{}
 
 // Variable or function
 type Obj struct {
@@ -87,20 +88,43 @@ type Node struct {
 	val  int  // Used if kind == ND_NUM
 }
 
-// Find a local variable by name.
+// Scope for local or global variables.
+type VarScope struct {
+	next *VarScope
+	name string
+	vara *Obj
+}
+
+// Represents a block scope.
+type Scope struct {
+	next *Scope
+	vars *VarScope
+}
+
+func enterScope() {
+	sc := &Scope{next: scope}
+	scope = sc
+}
+
+func leaveScope() {
+	scope = scope.next
+}
+
+func pushScope(name string, vara *Obj) *VarScope {
+	sc := &VarScope{name: name, vara: vara, next: scope.vars}
+	scope.vars = sc
+	return sc
+}
+
+// Find a variable by name.
 func findVar(tok *Token) *Obj {
-	for vara := locals; vara != nil; vara = vara.next {
-		if len(vara.name) == tok.len && tok.lexeme == vara.name {
-			return vara
+	for sc := scope; sc != nil; sc = sc.next {
+		for sc2 := sc.vars; sc2 != nil; sc2 = sc2.next {
+			if tok.equal(sc2.name) {
+				return sc2.vara
+			}
 		}
 	}
-
-	for vara := globals; vara != nil; vara = vara.next {
-		if len(vara.name) == tok.len && tok.lexeme == vara.name {
-			return vara
-		}
-	}
-
 	return nil
 }
 
@@ -142,10 +166,12 @@ func NewVarNode(vara *Obj, tok *Token) *Node {
 }
 
 func NewVar(name string, ty *Type) *Obj {
-	return &Obj{
+	vara := &Obj{
 		name: name,
 		ty:   ty,
 	}
+	pushScope(name, vara)
+	return vara
 }
 
 func NewLVar(name string, ty *Type) *Obj {
@@ -370,6 +396,9 @@ func compoundStmt(rest **Token, tok *Token) *Node {
 
 	head := Node{}
 	cur := &head
+
+	enterScope()
+
 	for !tok.equal("}") {
 		if isTypename(tok) {
 			cur.next = declaration(&tok, tok)
@@ -380,6 +409,8 @@ func compoundStmt(rest **Token, tok *Token) *Node {
 		}
 		cur.addType()
 	}
+
+	leaveScope()
 
 	node.body = head.next
 	*rest = tok.next
@@ -706,12 +737,14 @@ func function(tok *Token, basety *Type) *Token {
 	fn.isFunction = true
 
 	locals = nil
+	enterScope()
 	createParamLvars(ty.params)
 	fn.params = locals
 
 	tok = tok.skip("{")
 	fn.body = compoundStmt(&tok, tok)
 	fn.locals = locals
+	leaveScope()
 	return tok
 }
 
