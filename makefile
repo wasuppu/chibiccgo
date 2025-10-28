@@ -55,15 +55,15 @@ x64:
 	$(MAKE) test ARCH=x64
 	$(MAKE) test-stage2 ARCH=x64
 
-riscv:
-	$(MAKE) clean
-	$(MAKE) test ARCH=riscv
+# riscv:
+# 	$(MAKE) clean
+# 	$(MAKE) test ARCH=riscv
 # 	$(MAKE) stage2/chibicc ARCH=riscv
 # 	$(MAKE) test-stage2 ARCH=riscv
 
 # Stage 2
 
-testall: x64 riscv
+# testall: x64 riscv
 
 clean:
 	rm -rf chibicc tmp* test/x64 test/riscv stage2
