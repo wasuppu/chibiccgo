@@ -305,6 +305,9 @@ func evalConstExpr(rest **Token, tok *Token) int64 {
 		}
 	}
 
+	// Convert pp-numbers to regular numbers
+	convertPPTokens(expr)
+
 	var rest2 *Token
 	val := constExpr(&rest2, expr)
 	if rest2.kind != TK_EOF {
@@ -1075,7 +1078,7 @@ func preprocess(target Arch, tok *Token) *Token {
 	if condIncl != nil {
 		failTok(condIncl.tok, "unterminated conditional directive")
 	}
-	convertKeywords(tok)
+	convertPPTokens(tok)
 	joinAdjacentStringLiterals(tok)
 
 	return tok

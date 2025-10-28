@@ -59,6 +59,7 @@ const (
 	TK_KEYWORD                  // Keywords
 	TK_STR                      // String literals
 	TK_NUM                      // Numeric literals
+	TK_PP_NUM                   // Preprocessing numbers
 	TK_EOF                      // End-of-file markers
 )
 
@@ -280,8 +281,8 @@ func readCharLiteral(start, quote int) *Token {
 	return tok
 }
 
-func readIntLiteral(start int) *Token {
-	p := start
+func convertPPInt(tok *Token) bool {
+	p := tok.loc
 
 	// Read a binary, octal, decimal or hexadecimal number.
 	base := 10
@@ -324,6 +325,10 @@ func readIntLiteral(start int) *Token {
 	} else if source[p] == 'U' || source[p] == 'u' {
 		p++
 		u = true
+	}
+
+	if p != tok.loc+tok.len {
+		return false
 	}
 
 	// Infer a type.
@@ -372,22 +377,28 @@ func readIntLiteral(start int) *Token {
 		}
 	}
 
-	tok := NewToken(TK_NUM, start, p-start, source[start:p])
+	tok.kind = TK_NUM
 	tok.val = int64(val)
 	tok.ty = ty
-	return tok
+	return true
 }
 
-func readNumber(start int) *Token {
-	p := start
+// The definition of the numeric literal at the preprocessing stage
+// is more relaxed than the definition of that at the later stages.
+// In order to handle that, a numeric literal is tokenized as a
+// "pp-number" token first and then converted to a regular number
+// token after preprocessing.
+//
+// This function converts a pp-number token to a regular number token.
+func convertPPNumber(tok *Token) {
+	source = tok.file.contents
 	// Try to parse as an integer constant.
-	tok := readIntLiteral(p)
-	idx := strings.Index(".eEfF", string(source[p+tok.len]))
-	if idx == -1 {
-		return tok
+	if convertPPInt(tok) {
+		return
 	}
 
 	// If it's not an integer, it must be a floating point constant.
+	p := tok.loc
 	end := getFloatEnd(source[p:])
 	val, err := strconv.ParseFloat(source[p:p+end], 64)
 	if err != nil {
@@ -408,16 +419,20 @@ func readNumber(start int) *Token {
 		ty = tyDouble
 	}
 
-	tok = NewToken(TK_NUM, start, p-start, source[start:p])
+	if tok.loc+tok.len != p {
+		failTok(tok, "invalid numeric constant")
+	}
+	tok.kind = TK_NUM
 	tok.fval = val
 	tok.ty = ty
-	return tok
 }
 
-func convertKeywords(tok *Token) {
+func convertPPTokens(tok *Token) {
 	for t := tok; t.kind != TK_EOF; t = t.next {
 		if isKeyword(t) {
 			t.kind = TK_KEYWORD
+		} else if t.kind == TK_PP_NUM {
+			convertPPNumber(t)
 		}
 	}
 }
@@ -495,9 +510,21 @@ func tokenize(file *File) *Token {
 
 		// Numeric literal
 		if unicode.IsDigit(rune(input[p])) || (input[p] == '.' && unicode.IsDigit(rune(input[p+1]))) {
-			cur.next = readNumber(p)
+			q := p
+			p++
+			for {
+				if input[p] != '\x00' && input[p+1] != '\x00' &&
+					strings.Contains("eEpP", string(source[p])) &&
+					strings.Contains("+-", string(source[p+1])) {
+					p += 2
+				} else if unicode.IsDigit(rune(source[p])) || unicode.IsLetter(rune(source[p])) || input[p] == '.' {
+					p++
+				} else {
+					break
+				}
+			}
+			cur.next = NewToken(TK_PP_NUM, q, p-q, source[q:p])
 			cur = cur.next
-			p += cur.len
 			continue
 		}
 
