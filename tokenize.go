@@ -730,7 +730,7 @@ func tokenize(file *File) *Token {
 }
 
 // Returns the contents of a given file.
-func readFile(path string) string {
+func readFile(path string) []byte {
 	var data []byte
 	var err error
 
@@ -741,12 +741,12 @@ func readFile(path string) string {
 	}
 
 	if err != nil {
-		return ""
+		return []byte{}
 	}
 
-	content := string(data)
+	content := data
 	if len(content) > 0 && content[len(content)-1] != '\n' {
-		content += "\n"
+		content = append(content, '\n')
 	}
 	return content
 }
@@ -876,12 +876,21 @@ func tokenizeFile(path string) *Token {
 		return nil
 	}
 
-	cs := canonicalizeNewline([]byte(p + "\x00"))
-	cs = removeBackSlashNewline(cs)
-	cs = convertUniversalChars(cs)
+	// UTF-8 texts may start with a 3-byte "BOM" marker sequence.
+	// If exists, just skip them because they are useless bytes.
+	// (It is actually not recommended to add BOM markers to UTF-8
+	// texts, but it's not uncommon particularly on Windows.)
+	// p = []byte(strings.TrimPrefix(string(p), "\\xef\\xbb\\xbf"))
+	if len(p) >= 3 && p[0] == 0xEF && p[1] == 0xBB && p[2] == 0xBF {
+		p = p[3:]
+	}
+
+	p = canonicalizeNewline(append(p, '\x00'))
+	p = removeBackSlashNewline(p)
+	p = convertUniversalChars(p)
 
 	// Save the filename for assembler .file directive.
-	file := newFile(path, fileno+1, string(cs))
+	file := newFile(path, fileno+1, string(p))
 	inputfiles = append(inputfiles, make([]*File, fileno+2-len(inputfiles))...)
 	inputfiles[fileno] = file
 	inputfiles[fileno+1] = nil
