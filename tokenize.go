@@ -18,7 +18,7 @@ var kws = []string{
 	"return", "if", "else", "for", "while", "int", "sizeof", "char",
 	"struct", "union", "short", "long", "void", "typedef", "_Bool",
 	"enum", "static", "goto", "break", "continue", "switch", "case",
-	"default",
+	"default", "extern",
 }
 
 var puncts = []string{

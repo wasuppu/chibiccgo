@@ -216,6 +216,7 @@ type TagScope struct {
 type VarAttr struct {
 	isTypedef bool
 	isStatic  bool
+	isExtern  bool
 }
 
 // Represents a block scope.
@@ -388,6 +389,7 @@ func NewLVar(name string, ty *Type) *Obj {
 func NewGVar(name string, ty *Type) *Obj {
 	vara := NewVar(name, ty)
 	vara.next = globals
+	vara.isDefinition = true
 	globals = vara
 	return vara
 }
@@ -438,7 +440,7 @@ const (
 )
 
 // declspec = ("void" | "_Bool" | "char" | "short" | "int" | "long"
-// | "typedef" | "static"
+// | "typedef" | "static" | "extern"
 // | struct-decl | union-decl | typedef-name
 // | enum-specifier)+
 func declspec(rest **Token, tok *Token, attr *VarAttr) *Type {
@@ -447,19 +449,21 @@ func declspec(rest **Token, tok *Token, attr *VarAttr) *Type {
 
 	for isTypename(tok) {
 		// Handle storage class specifiers.
-		if tok.equal("typedef") || tok.equal("static") {
+		if tok.equal("typedef") || tok.equal("static") || tok.equal("extern") {
 			if attr == nil {
 				failTok(tok, "storage class specifier is not allowed in this context")
 			}
 
 			if tok.equal("typedef") {
 				attr.isTypedef = true
-			} else {
+			} else if tok.equal("static") {
 				attr.isStatic = true
+			} else {
+				attr.isExtern = true
 			}
 
-			if attr.isTypedef && attr.isStatic {
-				failTok(tok, "typedef and static may not be used together")
+			if attr.isTypedef && (attr.isStatic && attr.isExtern) {
+				failTok(tok, "typedef and static may not be used together with static or extern")
 			}
 			tok = tok.next
 			continue
@@ -1113,7 +1117,7 @@ func gvarInitializer(rest **Token, tok *Token, vara *Obj) {
 
 var typenames = []string{
 	"void", "_Bool", "char", "short", "int", "long", "struct", "union",
-	"typedef", "enum", "static",
+	"typedef", "enum", "static", "extern",
 }
 
 // Returns true if a given token represents a type.
@@ -2314,7 +2318,7 @@ func function(tok *Token, basety *Type, attr *VarAttr) *Token {
 	return tok
 }
 
-func globalVariable(tok *Token, basety *Type) *Token {
+func globalVariable(tok *Token, basety *Type, attr *VarAttr) *Token {
 	first := true
 
 	for !consume(&tok, tok, ";") {
@@ -2325,6 +2329,8 @@ func globalVariable(tok *Token, basety *Type) *Token {
 
 		ty := declarator(&tok, tok, basety)
 		vara := NewGVar(getIdent(ty.name), ty)
+		vara.isDefinition = !attr.isExtern
+
 		if tok.equal("=") {
 			gvarInitializer(&tok, tok.next, vara)
 		}
@@ -2365,7 +2371,7 @@ func parse(tok *Token) *Obj {
 		}
 
 		// Global variable
-		tok = globalVariable(tok, basety)
+		tok = globalVariable(tok, basety, &attr)
 	}
 
 	return globals

@@ -534,7 +534,7 @@ func (a X64) emitText(prog *Obj) {
 
 func (a X64) emitData(prog *Obj) {
 	for vara := prog; vara != nil; vara = vara.next {
-		if vara.isFunction {
+		if vara.isFunction || !vara.isDefinition {
 			continue
 		}
 
@@ -996,7 +996,7 @@ func (a RiscV) emitText(prog *Obj) {
 
 func (a RiscV) emitData(prog *Obj) {
 	for vara := prog; vara != nil; vara = vara.next {
-		if vara.isFunction {
+		if vara.isFunction || !vara.isDefinition {
 			continue
 		}
 
