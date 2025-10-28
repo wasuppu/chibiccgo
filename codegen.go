@@ -1238,6 +1238,12 @@ func (a X64) emitText(prog *Obj) {
 			continue
 		}
 
+		// No code is emitted for "static inline" functions
+		// if no one is referencing them.
+		if !fn.isLive {
+			continue
+		}
+
 		// Prologue
 		a.prologue(fn.name, fn.stackSize, fn.isStatic)
 		currentGenFn = fn
