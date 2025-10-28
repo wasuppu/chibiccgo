@@ -2670,6 +2670,9 @@ func function(tok *Token, basety *Type, attr *VarAttr) *Token {
 	// current function name.
 	pushScope("__func__").vara = newStringLiteral(fn.name+"\x00", arrayOf(tyChar, len(fn.name)+1))
 
+	// [GNU] __FUNCTION__ is yet another name of __func__.
+	pushScope("__FUNCTION__").vara = newStringLiteral(fn.name+"\x00", arrayOf(tyChar, len(fn.name)+1))
+
 	fn.body = compoundStmt(&tok, tok)
 	fn.locals = locals
 	leaveScope()
