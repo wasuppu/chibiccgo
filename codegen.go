@@ -238,8 +238,8 @@ func (a X64) pushf() {
 	depth++
 }
 
-func (a X64) popf(arg string) {
-	println("  movsd (%%rsp), %s", arg)
+func (a X64) popf(reg int) {
+	println("  movsd (%%rsp), %%xmm%d", reg)
 	println("  add $8, %%rsp")
 	depth--
 }
@@ -361,6 +361,20 @@ func (a X64) cmpZero(ty *Type) {
 	} else {
 		println("  cmp $0, %%rax")
 	}
+}
+
+func (a X64) pushArgs(args *Node) {
+	if args != nil {
+		a.pushArgs(args.next)
+
+		a.genExpr(args)
+		if args.ty.isFlonum() {
+			a.pushf()
+		} else {
+			a.push()
+		}
+	}
+
 }
 
 // Compute the absolute address of a given node.
@@ -524,18 +538,17 @@ func (a X64) genExpr(node *Node) {
 		println(".L.end.%d:", c)
 		return
 	case ND_FUNCALL:
-		nargs := 0
+		a.pushArgs(node.args)
+		gp, fp := 0, 0
 		for arg := node.args; arg != nil; arg = arg.next {
-			a.genExpr(arg)
-			a.push()
-			nargs++
+			if arg.ty.isFlonum() {
+				a.popf(fp)
+				fp++
+			} else {
+				a.pop(argReg64x[gp])
+				gp++
+			}
 		}
-
-		for i := nargs - 1; i >= 0; i-- {
-			a.pop(argReg64x[i])
-		}
-
-		println("  mov $0, %%rax")
 
 		if depth%2 == 0 {
 			println("  call %s", node.funcname)
@@ -574,7 +587,7 @@ func (a X64) genExpr(node *Node) {
 		a.genExpr(node.rhs)
 		a.pushf()
 		a.genExpr(node.lhs)
-		a.popf("%xmm1")
+		a.popf(1)
 
 		var sz string
 		if node.lhs.ty.kind == TY_FLOAT {
@@ -956,8 +969,8 @@ func (a RiscV) pushf() {
 	depth++
 }
 
-func (a RiscV) popf(arg string) {
-	println("  fld %s, 0(sp)", arg)
+func (a RiscV) popf(reg int) {
+	println("  fld fa%d, 0(sp)", reg)
 	println("  addi sp,sp,8")
 	depth--
 }
@@ -1079,6 +1092,19 @@ func (a RiscV) cmpZero(ty *Type) {
 		println("  feq.d a0, fa0, fa1")
 		println("  xori a0, a0, 1")
 		return
+	}
+}
+
+func (a RiscV) pushArgs(args *Node) {
+	if args != nil {
+		a.pushArgs(args.next)
+
+		a.genExpr(args)
+		if args.ty.isFlonum() {
+			a.pushf()
+		} else {
+			a.push()
+		}
 	}
 }
 
@@ -1240,15 +1266,33 @@ func (a RiscV) genExpr(node *Node) {
 		println(".L.end.%d:", c)
 		return
 	case ND_FUNCALL:
-		nargs := 0
+		a.pushArgs(node.args)
+		gp, fp := 0, 0
+		curArg := node.functy.params
 		for arg := node.args; arg != nil; arg = arg.next {
-			a.genExpr(arg)
-			a.push()
-			nargs++
-		}
+			if node.functy.isVariadic && curArg == nil {
+				if gp < 8 {
+					a.pop(argRegR[gp])
+					gp++
+				}
+				continue
+			}
 
-		for i := nargs - 1; i >= 0; i-- {
-			a.pop(argRegR[i])
+			curArg = curArg.next
+			if arg.ty.isFlonum() {
+				if fp < 8 {
+					a.popf(fp)
+					fp++
+				} else if gp < 8 {
+					a.pop(argRegR[gp])
+					gp++
+				}
+			} else {
+				if gp < 8 {
+					a.pop(argRegR[gp])
+					gp++
+				}
+			}
 		}
 
 		if depth%2 == 0 {
@@ -1293,7 +1337,7 @@ func (a RiscV) genExpr(node *Node) {
 		a.genExpr(node.rhs)
 		a.pushf()
 		a.genExpr(node.lhs)
-		a.popf("fa1")
+		a.popf(1)
 
 		var suffix string
 		if node.lhs.ty.kind == TY_FLOAT {
