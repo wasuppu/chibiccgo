@@ -238,6 +238,38 @@ func readCharLiteral(start int) *Token {
 	return tok
 }
 
+func readIntLiteral(start int) *Token {
+	p := start
+
+	base := 10
+	if strings.HasPrefix(strings.ToLower(source[p:p+2]), "0x") && isXDigit(source[p+2]) {
+		p += 2
+		base = 16
+	} else if strings.HasPrefix(strings.ToLower(source[p:p+2]), "0b") && isXDigit(source[p+2]) {
+		p += 2
+		base = 2
+	} else if source[p] == '0' {
+		base = 8
+	}
+
+	end := getIntegerEnd(source[p:])
+	val, err := strconv.ParseInt(source[p:p+end], base, 64)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%s: invalid argument convert to number: %s\n", source[start:p+end], err)
+		os.Exit(1)
+	}
+
+	p += end
+
+	if unicode.IsDigit(rune(source[p])) || unicode.IsLetter(rune(source[p])) {
+		failAt(p, "invalid digit")
+	}
+
+	tok := NewToken(TK_NUM, start, p-start, source[start:p])
+	tok.val = val
+	return tok
+}
+
 func convertKeywords(tok *Token) {
 	for t := tok; t.kind != TK_EOF; t = t.next {
 		if isKeyword(t) {
@@ -303,11 +335,9 @@ func tokenize(filename string, input string) *Token {
 
 		// Numeric literal
 		if unicode.IsDigit(rune(input[p])) {
-			n, np := parseNumber(input, p)
-			cur.next = NewToken(TK_NUM, p, np-p, input[p:np])
+			cur.next = readIntLiteral(p)
 			cur = cur.next
-			cur.val = int64(n)
-			p = np
+			p += cur.len
 			continue
 		}
 
@@ -384,17 +414,12 @@ func tokenizeFile(path string) *Token {
 	return tokenize(path, readFile(path))
 }
 
-func parseNumber(s string, pos int) (int, int) {
-	start := pos
-	for pos < len(s) && unicode.IsDigit(rune(s[pos])) {
-		pos++
+func getIntegerEnd(s string) int {
+	end := 0
+	for end < len(s) && isXDigit(s[end]) {
+		end++
 	}
-	num, err := strconv.Atoi(s[start:pos])
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "%s: invalid argument convert to number: %s\n", s[start:pos], err)
-		os.Exit(1)
-	}
-	return num, pos
+	return end
 }
 
 func isXDigit(c byte) bool {
